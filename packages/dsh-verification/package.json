@@ -2,7 +2,9 @@
   "name": "@bpc-oss/dsh-verification",
   "description": "Verification engine for DeepSeek Harness: claim -> evidence -> verdict -> completion gate (ported from Bobby's conscience layer)",
   "version": "1.0.0",
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -13,7 +15,9 @@
     },
     "./package.json": "./package.json"
   },
-  "files": ["lib"],
+  "files": [
+    "lib"
+  ],
   "license": "Apache-2.0",
   "dependencies": {
     "zod": "^4.4.3",
@@ -54,5 +58,16 @@
     "test": "vitest run",
     "bench": "vitest run bench/run-benchmark.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
-  }
+  },
+  "homepage": "https://github.com/bpc-oss/dsh-verification",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "verification",
+    "agent",
+    "acceptance-criteria",
+    "evidence",
+    "completion-gate",
+    "bobby"
+  ]
 }

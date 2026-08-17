@@ -3,7 +3,10 @@
   "private": true,
   "version": "1.0.0",
   "packageManager": "pnpm@11.5.2",
-  "repository": { "type": "git", "url": "git+https://github.com/bpc-oss/dsh-verification.git" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bpc-oss/dsh-verification.git"
+  },
   "description": "Bobby verification engine ported to DeepSeek Harness (DSH) Cordis plugins",
   "type": "module",
   "scripts": {
@@ -15,5 +18,16 @@
     "tsup": "^8.3.0",
     "typescript": "^5.9.3",
     "vitest": "^3.2.0"
-  }
+  },
+  "homepage": "https://github.com/bpc-oss/dsh-verification",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "verification",
+    "agent",
+    "acceptance-criteria",
+    "evidence",
+    "completion-gate",
+    "bobby"
+  ]
 }

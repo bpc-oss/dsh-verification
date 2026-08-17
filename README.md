@@ -1,5 +1,37 @@
 # dsh-verification
 
+[![CI](https://github.com/bpc-oss/dsh-verification/actions/workflows/ci.yml/badge.svg)](https://github.com/bpc-oss/dsh-verification/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
+> Verification engine for DeepSeek Harness (DSH) agents — a port of the
+> [Bobby](https://github.com/bpc-oss/bobby) "Conscience" layer.
+
+**"Claimed done" becomes "actually done."** Before an agent can complete a goal,
+every acceptance criterion must be backed by server-stamped, real tool evidence
+(tool outputs, not model self-reports). The completion gate rejects unverified
+completions with a defect list; advisory mode records everything without ever
+blocking.
+
+- **plan**: freeze selectors (tool + args hash) for each AC
+- **work**: tool calls auto-capture as content-addressed evidence
+- **complete**: each AC needs a real-evidence `pass`, else the gate returns the
+  defect list
+- **audit**: evidence/verdicts/gate are append-only session events, replayable
+
+| Package | What it does |
+|---|---|
+| `@bpc-oss/dsh-verification` | engine: task epochs, contracts, oracles, completion gate |
+| `@bpc-oss/dsh-evidence` | pure zod schemas: contracts, evidence, verdicts, selectors |
+| `@bpc-oss/dsh-client-ui-verification` | client: verification settings panel |
+
+**Benchmarks** (reproducible): synthetic recall **100%** / false-positive **0%**
+(`pnpm --filter @bpc-oss/dsh-verification bench`); real-task replay audit and
+completion-capability evaluation in `docs/value-report.md` and `scripts/`.
+
+---
+
+# 中文文档（详细）
+
 Bobby 验证引擎移植到 DeepSeek Harness（DSH）的 Cordis 插件套件（**契约权威：v9 / v11**）。
 
 **核心承诺：在 DSH 里，"声称完成"与"真的完成"被结构性等同。**
