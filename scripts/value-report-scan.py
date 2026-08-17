@@ -41,7 +41,9 @@ for f in files:
         agg["sessions"].add(sid)
         if smoke: continue
         agg_real["sessions"].add(sid)
-        local["contracts"] += 1 if kind == "plan" else 0
+        if kind == "plan":
+            agg_real["contracts"] += 1
+            local["contracts"] += 1
         if kind == "verdicts":
             for ac_id, v in (rec.get("verdicts") or {}).items():
                 agg_real["verdicts"] += 1; local["verdicts"] += 1

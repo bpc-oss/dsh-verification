@@ -16,6 +16,10 @@ function shortHash(hash: string): string {
   return hash.length > 12 ? `${hash.slice(0, 8)}…${hash.slice(-4)}` : hash;
 }
 
+/**
+ * @deprecated 2026-08-17：对话输入坞的验证卡片已移除（client.tsx 不再注入 conversation.input.dock）。
+ * 组件保留仅为 API 兼容与单测引用；如需恢复 dock，在 client.tsx 重新注入即可。
+ */
 export function ContractCard({ contract, t = fallbackT }: { contract: TaskContract; t?: Translator }): ReactElement {
   return (
     <div data-verification-contract>
@@ -52,6 +56,9 @@ export function ContractCard({ contract, t = fallbackT }: { contract: TaskContra
   );
 }
 
+/**
+ * @deprecated 2026-08-17：dock 卡片已移除，保留仅为 API 兼容（见 ContractCard 说明）。
+ */
 export function VerdictSummary({
   contract,
   verdicts,
@@ -90,6 +97,9 @@ export function VerdictSummary({
   );
 }
 
+/**
+ * @deprecated 2026-08-17：dock 卡片已移除，保留仅为 API 兼容（见 ContractCard 说明）。
+ */
 export function EvidencePanel({ evidence, t = fallbackT }: { evidence: EvidenceRef[]; t?: Translator }): ReactElement {
   if (evidence.length === 0) {
     return (
@@ -123,6 +133,8 @@ export function EvidencePanel({ evidence, t = fallbackT }: { evidence: EvidenceR
 /**
  * Dock 适配器：从会话投影系统读取 `verification` projection（标准 props 提供 `useProjection`）。
  * 无计划（null/undefined）时渲染空。
+ * @deprecated 2026-08-17：client.tsx 不再注入 conversation.input.dock，本组件在生产路径为死代码；
+ * 保留仅为 API 兼容与单测引用。如需恢复 dock，在 client.tsx 重新注入。
  */
 export function VerificationDock({
   useProjection,

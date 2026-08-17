@@ -66,7 +66,7 @@ function lastCloseBoundary(epochs: FoldedEpoch[], eventSeq: number): number {
 
 /**
  * 从 session goal 日志折叠任务 epoch。
- * @throws -- 无权威用户消息的 root create 不建 epoch（plan 绑定将收到 missing_root_goal）。
+ * v11 放宽：窗口内无权威用户消息的 root create 以 goal create 自身 seq 为 rootSeq 建 epoch（不 fail-closed）。
  */
 export function foldTaskEpochs(events: readonly GoalLogEvent[], sessionId: string): FoldedEpoch[] {
   const epochs: FoldedEpoch[] = [];
@@ -136,12 +136,11 @@ export function epochOpenBases(epochs: readonly FoldedEpoch[]): { rootGoalId: st
 /** 增量 epoch fold（projection 注册表 apply 用；与批处理 foldTaskEpochs 语义一致）。 */
 export interface IncrementalEpochState {
   epochs: FoldedEpoch[];
-  pendingCreate: { goalId: string; eventSeq: number } | null;
   lastUserSeqOutsideActive: number;
 }
 
 export function emptyIncrementalEpochState(): IncrementalEpochState {
-  return { epochs: [], pendingCreate: null, lastUserSeqOutsideActive: -1 };
+  return { epochs: [], lastUserSeqOutsideActive: -1 };
 }
 
 export function applyEpochEvent(state: IncrementalEpochState, event: GoalLogEvent, sessionId: string): IncrementalEpochState {
@@ -170,7 +169,7 @@ export function applyEpochEvent(state: IncrementalEpochState, event: GoalLogEven
       createdSeq: event.seq,
       status: 'active'
     };
-    return { epochs: [...state.epochs, epoch], pendingCreate: null, lastUserSeqOutsideActive: -1 };
+    return { epochs: [...state.epochs, epoch], lastUserSeqOutsideActive: -1 };
   }
   const active = currentActiveEpoch(state.epochs);
   if (
@@ -182,7 +181,6 @@ export function applyEpochEvent(state: IncrementalEpochState, event: GoalLogEven
     const closed: FoldedEpoch = { ...active, status: 'closed', closedSeq: event.seq };
     return {
       epochs: state.epochs.map((epoch) => (epoch.epochId === closed.epochId ? closed : epoch)),
-      pendingCreate: state.pendingCreate,
       lastUserSeqOutsideActive: state.lastUserSeqOutsideActive
     };
   }

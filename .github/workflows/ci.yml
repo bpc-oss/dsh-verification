@@ -34,3 +34,6 @@ jobs:
 
       - name: Verification benchmark (recall / false positives)
         run: pnpm --filter @bpc-oss/dsh-verification bench
+
+      - name: dist-pack consistency (repack vs committed tgz)
+        run: node scripts/check-dist-pack.mjs

@@ -357,11 +357,14 @@ export class VerificationService extends Service {
     let scope: AuthorityScope;
     try {
       scope = this.requireCurrentAuthorityScope(agent);
-    } catch {
-      // 无活跃任务 epoch（如 root goal 创建前缺少权威用户消息 → fail-closed 不建 epoch）：
-      // 旧 plan 已不可用——降级为"无 plan"，避免 getContract 在 tools/pre-execute 里
-      // 抛出不透明的 missing_authority_scope 而把写工具整体锁死（advisory 模式应放行）。
-      return null;
+    } catch (error) {
+      // 仅当"无活跃任务 epoch"（root goal 创建前缺少权威用户消息等）时降级为"无 plan"，
+      // 避免 getContract 在 tools/pre-execute 里抛出不透明的 missing_authority_scope 把写工具锁死。
+      // 其他真实错误（如非法记录重放、durable 提交失败）必须继续抛出，不得吞掉。
+      if (error instanceof VerificationError && error.code === 'VERIFICATION_MISSING_ROOT_GOAL') {
+        return null;
+      }
+      throw error;
     }
     return plan.authorityScope !== undefined && plan.authorityScope.epochId === scope.epochId && plan.authorityScope.rootGoalId === scope.rootGoalId && plan.authorityScope.ownerAgentId === scope.ownerAgentId ? plan : null;
   }
