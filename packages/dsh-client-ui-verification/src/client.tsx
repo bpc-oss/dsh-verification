@@ -1,13 +1,13 @@
 /**
- * Client 插件入口：把验证面板挂到对话输入坞（conversation.input.dock）+ 设置节（settings.section）。
+ * Client 插件入口：验证状态仅保留在设置节（settings.section）。
+ * 不再注入对话输入坞（conversation.input.dock）——用户反馈验证卡片在目标栏与输入框之间
+ * 渲染大量文字（验收标准/验证/未裁决/证据），判定为干扰；引擎功能与设置页查看不受影响。
  * 数据经会话投影系统（useProjection('verification')）读取，无需额外 RPC。
- * 仿 `dsh-client-ui-goal` 的注册模式；真实 slot 名以开发时 Slots.listSubTree 实测为准。
  */
 import type { Context } from '@deepseek-ai/cordis';
 import type { ReactElement } from 'react';
 import type { VerificationProjection } from '@bpc-oss/dsh-verification';
 
-import { VerificationDock } from './components';
 import { en, zh } from './locales';
 
 export const name = 'client-ui-verification';
@@ -57,18 +57,6 @@ export function apply(ctx: Context): void {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return localeAny?.register?.('verification', { en, zh }) as any;
   });
-
-  slots.inject('conversation.input.dock', () =>
-    slots.register(
-      {
-        name: 'conversation.input.dock',
-        id: 'verification',
-        order: 20,
-        locale: 'verification'
-      },
-      VerificationDock
-    )
-  );
 
   // 设置节（P0 修复 #2：补齐 order/label/inject，导航项不再空白）
   slots.inject('settings.section', () =>
