@@ -72,9 +72,31 @@
 | 一致性 FLAG（fail 但日志存在匹配证据） | **0** |
 | 证据 / 捕获失败 | 839 / ~2015 |
 
-**结论**：真实任务上，引擎判定的 4 条失败**全部经日志证据证实**（如 `ac-review-pass` 的 "no committed run for selector (glob, 3ac71ab8)"——日志中确实不存在任何匹配该 selector 的工具调用；`ac-research` 的 "No files found"——绑定证据为返回空结果的 glob）。即：**引擎在真实数据上抓到了 4 条证据不足的验收，无一误判**；并拦截了 1 次真实完成闸门。
+**结论**：真实任务上，引擎判定的 4 条失败中，`ac-review-pass`（no committed run）**经日志证实成立**（确实无匹配 selector 的调用）；但 `ac-research`（No files found）经交付物存在性交叉验证为**假阴性**（见 §五之三）——即真实拦截 1 次成立、1 次为误拒，并拦截了 1 次真实完成闸门。
 
 > 局限：payload 不落盘（引擎用内存 blob store），本基准做"日志权威裁决 + 一致性验证"，不做 oracle 全量重放——这恰是真实数据上可复核的部分。
+
+## 五之三、完成任务能力评估（诚实结论：发现真实误拒）
+
+只测"拦截"不够——核心是**能否让真实完成的任务通过**。对真实契约逐条 fail 裁决做"交付物存在性"交叉验证（`scripts/task-completion-eval.py`）：
+
+| 分类 | 数量 | 说明 |
+|---|---|---|
+| **FALSE_REJECTION（真实完成被误拒）** | **2**（ac-research × 2 plan） | 57 条 write→file_diff 证据已产出 docs（`02-external-research-summary.md` 等，磁盘文件真实存在），但 gate 判 `No files found` |
+| pass（正确放行） | 2（ac-design） | ✅ |
+| 一致 fail（真负候选） | 2（ac-review-pass） | 无匹配证据（当时审查证据未落账） |
+
+**关键发现（ac-research 误拒证据链）**：
+- 冻结 selector = `glob(5111cf8b)`；会话中唯一匹配的 glob 调用（seq 45307）参数为 `{"pattern":"E:/ai-files/dsh-continuous-worker/docs/*.md"}`——**路径正确**，运行时文档已写完（write 证据 seq 12043+，早于 glob），磁盘文件存在；
+- 但该 glob 返回 "No files found"（疑似 Windows 正斜杠路径/工具行为），且 **write→file_diff 证据（57 条，路径精确匹配交付物）因不匹配冻结 selector 从未被绑定**；
+- 结果：真实完成的任务被 gate 判 fail → **假阴性**。
+
+**结论与改进方向**：真实任务上引擎的"拦截"包含假拒绝——selector 冻结是 exact-only，交付物若由其他工具（write/edit）产生则永远验证不到。开源前必须改进：
+1. **绑定期证据族感知**（binder 复用已有 `EVIDENCE_FAMILIES`：file_diff/file_exists/quote_with_location 互认）——file 类 AC 在 exact selector 证据缺失时，允许用作用域内真实文件证据裁决（带注明），减少误拒；
+2. **selector 冻结引导**：set_verification_plan 的提示让 agent 按实际工作工具冻结 selector；
+3. 把"完成任务能力"（假拒绝率）纳入 benchmark 指标，与"拦截率"并列。
+
+> 诚实声明：合成 benchmark 的 100% 召回率是"引擎按冻结 selector 判定"的能力；真实数据暴露的是"selector/绑定与现实交付方式错配"导致的假阴性——这是开源前必须解决的可靠性议题。
 
 ## 六、还缺什么（开源前建议补齐）
 
