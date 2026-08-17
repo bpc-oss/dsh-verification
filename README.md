@@ -10,6 +10,36 @@ Bobby 验证引擎移植到 DeepSeek Harness（DSH）的 Cordis 插件套件（*
 > 设计铁律：工具直接产出的真实记录才是证据（L1/L3）；验证失败不许静默通过（L7）；
 > 契约唯一真源（服务端 mint），模型不能单方面定义验收标准。
 
+## 推荐 workflow（对用户与模型）
+
+```
+① 用户发一条消息说明任务（如"实现 X，附验收标准…"）
+② 模型 create_goal 建立目标（创建后自动形成任务 epoch）
+③ 模型 set_verification_plan(goal_id, revision) 声明验收标准（AC + 证据 selector）
+④ 模型多步执行——工具调用自动留痕为 CapturedEvidence（真实输出，非模型自述）
+⑤ 模型 update_goal action=complete：
+     advisory（默认）：记录评估结果，永不 deny
+     enforce（验收/评测）：全部 AC 拿到真实证据支持的 pass 才放行，否则返回缺陷清单
+```
+
+**关键规则**
+
+- **只有 `create_goal` 建立任务 epoch**——epoch 是验证作用域（authorityScope）的根；
+  `set_verification_plan` 必须针对**当前活跃目标**的 id + revision 调用（先 `get_goal` 确认）。
+- **v11 放宽**：目标由 agent/UI 侧创建（创建前无用户消息）时，引擎以 goal create 自身为任务起点
+  建立 epoch，不再 fail-closed——任何创建方式都不会导致写工具被锁死。
+- 只读工具（read/grep/glob）永不拦截；日常 profile 保持 `mode: advisory`（只记录，不改变行为）。
+
+**常见报错与处理（troubleshooting）**
+
+| 报错 | 含义 | 处理 |
+|---|---|---|
+| `missing_authority_scope: no active task epoch` | 当前无活跃任务 epoch | 先 `create_goal`（建议先发消息再让模型创建），再 `set_verification_plan` |
+| `missing_root_goal: no active root goal` | 未建立根目标 | 同上；先发消息说明任务 |
+| `missing_root_goal: active root goal is X, not Y` | 目标 id/revision 不匹配 | `get_goal` 确认当前活跃目标后重试 |
+| `missing_contract: …写入类工具…`（enforce 下） | 未声明契约就执行副作用工具 | 先 `set_verification_plan`；日常用 advisory |
+| `Verification gate rejected completion: …` | 完成闸门拒绝（缺陷清单） | 按清单补真实工具证据，修复后重试 `update_goal complete` |
+
 ## 包
 
 | 包 | 作用 |

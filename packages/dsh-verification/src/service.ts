@@ -343,7 +343,10 @@ export class VerificationService extends Service {
   private requireCurrentAuthorityScope(agent: Agent): AuthorityScope {
     const epoch = this.getActiveEpoch(agent);
     if (!epoch) {
-      throw new VerificationError('missing_authority_scope: no active epoch', 'VERIFICATION_MISSING_ROOT_GOAL');
+      throw new VerificationError(
+        'missing_authority_scope: no active task epoch。引导：请先调用 create_goal 建立目标（建议在一条用户消息之后让模型创建），再 set_verification_plan 声明契约；advisory 模式可跳过声明直接执行。',
+        'VERIFICATION_MISSING_ROOT_GOAL'
+      );
     }
     return { epochId: epoch.epochId, rootGoalId: epoch.rootGoalId, ownerAgentId: String(agent.id) };
   }
@@ -381,10 +384,16 @@ export class VerificationService extends Service {
   requireGoalBoundEpoch(agent: Agent, goalId: string, goalRevision: number): FoldedEpoch {
     const active = this.getActiveEpoch(agent);
     if (!active) {
-      throw new VerificationError('missing_root_goal: no active root goal; create_goal must establish the task epoch', 'VERIFICATION_MISSING_ROOT_GOAL');
+      throw new VerificationError(
+        'missing_root_goal: no active root goal; create_goal must establish the task epoch。引导：先发一条消息说明任务，再让模型调用 create_goal，然后 set_verification_plan 绑定验收标准。',
+        'VERIFICATION_MISSING_ROOT_GOAL'
+      );
     }
     if (active.rootGoalId !== goalId) {
-      throw new VerificationError(`missing_root_goal: active root goal is ${active.rootGoalId}, not ${goalId}`, 'VERIFICATION_MISSING_ROOT_GOAL');
+      throw new VerificationError(
+        `missing_root_goal: active root goal is ${active.rootGoalId}, not ${goalId}。引导：set_verification_plan 必须针对当前活跃目标调用，请先 get_goal 确认当前目标 id 与 revision。`,
+        'VERIFICATION_MISSING_ROOT_GOAL'
+      );
     }
     const snapshot = currentGoalSnapshot(agent.session.events, goalId);
     if (!snapshot || snapshot.revision !== goalRevision || snapshot.phase === 'complete') {
