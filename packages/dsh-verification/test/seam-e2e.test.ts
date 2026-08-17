@@ -62,7 +62,8 @@ function makeEnv() {
     proReviewProvider: 'spawn',
     globalConstraints: [],
     intent: { consensusCount: 1, contractOrigin: 'independent-capture', maxEntries: 200 },
-    readOnlyToolAllowlist: []
+    readOnlyToolAllowlist: [],
+    binderFamilyFallback: true
   };
   const store = createMemoryBlobStore();
   const svc = new VerificationService(ctx, config, { store });
