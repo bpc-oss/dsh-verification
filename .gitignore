@@ -1,6 +1,7 @@
 node_modules/
 dist/
 lib/
+!vendor/@deepseek-ai/dsh-goal/lib/
 *.log
 .DS_Store
 .tmp-profile-pkgs/
