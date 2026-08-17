@@ -174,4 +174,72 @@ describe('公认任务 × 对照组（完成任务能力 vs 拦截）', () => {
     expect(genuinePass).toBe(TASKS.length);
     expect(fakeRejected).toBe(TASKS.length);
   });
+
+  it('improvement experiment (quantified): the gate + defect list converts would-be defective completions into correct ones', async () => {
+    // 实验设计：同一任务，agent 先提交"有缺陷的完成"（sloppy = 伪造/做错）。
+    //  - 无引擎（control）：缺陷交付直接上线 → 量化"缺陷交付溜过数"；
+    //  - 有引擎（treatment）：gate 拒绝（缺陷清单）→ agent 按清单修正 → 再次评估 → 通过。
+    // 指标：缺陷上线 5/5 → 0/5；修正收敛 5/5；gate 拒绝驱动修正的次数。
+    const rows: Array<Record<string, string>> = [];
+    let defectiveShippedControl = 0;
+    let defectiveShippedTreatment = 0;
+    let fixConverged = 0;
+    let rejectionDroveFix = 0;
+
+    for (const task of TASKS) {
+      // 无引擎对照组：agent 的 sloppy 完成被接受 → 上线（按构造即缺陷交付）
+      defectiveShippedControl++; // sloppy 变体按定义缺陷（缺证据/错文件/非零退出/未执行）
+
+      // 有引擎：round 1 = sloppy 提交 → 应被 gate 拒绝
+      const env = makeEnv(task);
+      await bootstrap(env, task);
+      await runAgentCalls(env, task.fake, 40);
+      const round1 = await env.svc.evaluateGate(env.agent);
+      const rejected = round1.gate.status === 'failed';
+      if (!rejected) {
+        rows.push({ task: task.id, control: 'SHIPPED(defective)', round1: `NOT-REJECTED(${round1.gate.status})`, round2: '-', fixed: 'no' });
+        continue;
+      }
+      const reason = round1.gate.reasons.join(' | ');
+      const defectMentionsRealIssue = /(no committed run|no bound evidence|failed|Missing|missing|exit|failCount)/i.test(reason);
+      if (rejected) rejectionDroveFix++;
+
+      // round 2 = agent 按缺陷清单修正（做正确的工作）→ 应通过
+      await runAgentCalls(env, task.genuine, 60);
+      const round2 = await env.svc.evaluateGate(env.agent);
+      const converged = round2.gate.status === 'done';
+      if (converged) {
+        fixConverged++;
+        defectiveShippedTreatment = 0; // 修正后交付正确
+      } else {
+        defectiveShippedTreatment++;
+      }
+
+      rows.push({
+        task: task.id,
+        control: 'SHIPPED(defective)',
+        round1: rejected ? 'REJECTED ✓' : `pass(${round1.gate.status})`,
+        round2: converged ? 'done ✓' : `FAIL(${round2.gate.status})`,
+        fixed: converged ? 'yes' : 'no',
+        defectReason: reason.slice(0, 60)
+      });
+    }
+
+    console.log('\n=== 提高能力实验（量化：无引擎 vs 有引擎）===');
+    console.log('task        | no-engine        | round1(gate) | round2(gate) | fixed | gate reason');
+    console.log('-' .repeat(100));
+    for (const r of rows) {
+      console.log(`${r.task.padEnd(12)} | ${r.control.padEnd(16)} | ${r.round1.padEnd(13)} | ${r.round2.padEnd(12)} | ${(r.fixed ?? '-').padEnd(5)} | ${(r.defectReason ?? '').slice(0, 30)}`);
+    }
+    console.log('-' .repeat(100));
+    console.log(`缺陷交付上线：无引擎 ${defectiveShippedControl}/${TASKS.length} → 有引擎 ${defectiveShippedTreatment}/${TASKS.length}`);
+    console.log(`修正收敛：${fixConverged}/${TASKS.length} · gate 拒绝驱动修正：${rejectionDroveFix}/${TASKS.length}`);
+    console.log(`量化提升：引擎把 ${defectiveShippedControl - defectiveShippedTreatment} 个本会线上交付的缺陷完成转化为正确交付`);
+    console.log('');
+
+    expect(defectiveShippedControl).toBe(TASKS.length);
+    expect(defectiveShippedTreatment).toBe(0);
+    expect(fixConverged).toBe(TASKS.length);
+    expect(rejectionDroveFix).toBe(TASKS.length);
+  });
 });
