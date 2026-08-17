@@ -27,10 +27,19 @@ const GRADER = graderContract({
   outOfScope: []
 });
 
-function makeEnv(binderFamilyFallback: boolean) {
+const GRADER_LIVE_README = graderContract({
+  goal: '创建 README.md 含 live-verification-ok',
+  acceptanceCriteria: [{ id: 'AC1', desc: '文件 README.md 包含字符串 live-verification-ok', oracleHint: 'file' }],
+  constraints: [],
+  inputs: [],
+  outOfScope: []
+});
+
+let _envSeq = 0;
+function makeEnv(binderFamilyFallback: boolean, grader: string = GRADER) {
   const ctx = new Context();
-  const session = Session.create(SessionId('sess-completion'));
-  const agent = { id: 'completion-agent', session } as unknown as Agent;
+  const session = Session.create(SessionId(`sess-completion-${++_envSeq}`));
+  const agent = { id: `completion-agent-${_envSeq}`, session } as unknown as Agent;
   ctx.provide('agents', {
     get: (id: string) => (id === agent.id ? agent : undefined)
   } as never);
@@ -54,7 +63,7 @@ function makeEnv(binderFamilyFallback: boolean) {
   };
   const store = createMemoryBlobStore();
   const svc = new VerificationService(ctx, config, { store });
-  ctx.provide('llm', makeFakeLlm({ respondWith: () => GRADER }));
+  ctx.provide('llm', makeFakeLlm({ respondWith: () => grader }));
   return { ctx, session, agent, goals, svc, store };
 }
 
@@ -122,5 +131,42 @@ describe('task completion capability (family fallback fixes false rejection of g
     const verdicts = env.svc.getProjection(env.agent).verdicts;
     expect(verdicts.AC1?.result).toBe('fail');
     expect(verdicts.AC1?.detail ?? '').toContain('no committed run for selector');
+  });
+
+  it('LIVE reproduction (2026-08-18 real model): agent froze selector {path:README.md} but wrote with {file_path: absolute} → family fallback makes the genuine completion pass', async () => {
+    // 真实 live 会话 session-efdad254：agent 用 set_verification_plan 冻结了 write + {path:'README.md'}，
+    // 但实际 write 调用是 {file_path:'C:\\...\\README.md'}（参数名 + 绝对路径不同）→ exact 哈希不匹配。
+    // 文件真实存在且内容正确；family fallback（路径对齐 README.md）应将其转 pass。
+    const env = makeEnv(true, GRADER_LIVE_README);
+    env.session.append('user/message', { id: 'u0', source: { kind: 'user' }, content: [{ type: 'text', text: '创建 README.md 含 live-verification-ok' }] }, { surfaceOp: 'append' });
+    const view = env.goals.create(env.agent, { objective: '创建 README.md 含 live-verification-ok' });
+    const proposal = {
+      goal_value: '创建 README.md 含 live-verification-ok',
+      acceptance_criteria: [{ id: 'AC1', desc: '文件 README.md 包含字符串 live-verification-ok', oracleHint: 'file', tool: 'write', args: { path: 'README.md' } }],
+      constraints: [],
+      inputs: [],
+      outOfScope: []
+    };
+    const result = await env.svc.setPlanFromProposal(env.agent, view.id, view.revision, proposal);
+    if (!result.ok) throw new Error(result.reason);
+
+    // agent 的真实 write 调用（live 形状：file_path 绝对路径）
+    await env.svc.captureEvidence(
+      env.agent,
+      {
+        callId: 'w1',
+        name: 'write',
+        arguments: { file_path: 'C:\\Users\\Administrator\\.dsh\\tmp\\live-demo\\README.md', content: '# Live Demo\n\nlive-verification-ok' },
+        isError: false,
+        value: { path: 'C:\\Users\\Administrator\\.dsh\\tmp\\live-demo\\README.md', after: '# Live Demo\n\nlive-verification-ok' }
+      },
+      40
+    );
+
+    const outcome = await env.svc.evaluateGate(env.agent);
+    expect(outcome.gate.status).toBe('done');
+    const verdicts = env.svc.getProjection(env.agent).verdicts;
+    expect(verdicts.AC1?.result).toBe('pass');
+    expect(verdicts.AC1?.detail ?? '').toContain('family evidence fallback');
   });
 });
