@@ -37,22 +37,36 @@
 - 性质：引擎对**无法完整捕获的证据记录失败事件**（fail-safe，绝不伪造证据），这是"不撒谎"的设计
 - 但 64% 的失败率也提示**捕获管线需要调优**（blob 大小上限 / 截断策略 / 沙箱路径），是开源前应攻克的可靠性议题
 
-## 四、可靠性证据（自动化测试）
+## 四、可靠性证据（自动化测试 + benchmark）
 
-- `dsh-verification`：139 个单测全绿（含 enforce 模式、证据绑定、闸门、epoch 折叠、契约权威）
+- `dsh-verification`：**140 个单测全绿**（含 enforce 模式、证据绑定、闸门、epoch 折叠、契约权威、fail-closed 放宽回归）
 - `dsh-evidence`：schema 校验测试全绿
 - `dsh-client-ui-verification`：13 个组件/设置测试全绿
 - 类型检查全绿；真实会话回放无崩溃
+- **可复现 benchmark**（`pnpm --filter @bpc-oss/dsh-verification bench`）：见 §五
 
-## 五、还缺什么（开源前建议补齐）
+## 五、可复现 benchmark：缺陷拦截评测
 
-1. **可复现 benchmark**：5–10 个带植入缺陷的合成任务（改错文件、缺证据、谎报完成），给出**召回率**（坏任务被拦截比例）与**误报率**（好任务被误拦比例）
-2. **with/without 对比**：同一任务开/关引擎，对比交付物真实存在性、测试通过率
-3. **捕获失败归因**：把 1511 条失败按原因分类（超限/截断/哈希/沙箱），证明是保守设计而非缺陷
-4. **README 数字表**：把上述数字 + 案例链接放到开源仓库首页
+12 个合成场景（**8 个植入缺陷 + 4 个干净**）走真实确定性裁判（T0 test-run / command-exit / file-exists / file-diff / schema-valid + T3 coverage）与完成闸门，结果：
 
-## 六、方法论（可复核）
+| 指标 | 数值 |
+|---|---|
+| **召回率**（缺陷场景被闸门拦截比例） | **100%**（8/8） |
+| **误报率**（干净场景被误拦比例） | **0%**（4/4） |
+| AC 级裁决命中 | 12/12 |
+
+场景即"谎报完成"攻击面：文件不存在（`file_exists=false`）、无任何已提交运行（`no-committed-run`）、测试红却说绿（`exitCode=1`）、命令非零退出、文件内容与验收不符、schema 无效、跨 AC 复用证据冒充、一过一缺的整体闸门拒绝。运行方式与期望表见 `packages/dsh-verification/bench/README.md`。
+
+> 基准自身也曾抓到场景数据 bug（干净场景内容不含验收字面量被误判 fail）——证明该评测对"期望表本身"也有防呆作用。
+
+## 六、还缺什么（开源前建议补齐）
+
+1. **with/without 对比**：同一任务开/关引擎，对比交付物真实存在性、测试通过率（直接量化增益）
+2. **捕获失败归因**：把 ~1511 条失败按原因分类（超限/截断/哈希/沙箱），证明是保守设计而非缺陷
+3. **README 数字表**：把上述数字 + 案例链接放到开源仓库首页（见仓库 README "Why verification?" 章节）
+
+## 七、方法论（可复核）
 
 - 事件为 append-only：`{type:"verification/change", data:{record:{kind: plan|verdicts|gate|evidence|capture-failure|permit}}}`
 - 本报告 = 对 228 个会话存档的 zstd 多帧解压 + 事件计数 + 裁决/闸门明细提取
-- 复现脚本：`scripts/value-report-scan.py`（待提交）
+- 复现脚本：`scripts/value-report-scan.py`（仓库内，可重跑）
