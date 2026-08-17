@@ -140,11 +140,37 @@ export async function bindSelectorForAc(
 }
 
 /**
+ * 从 AC 描述中提取"交付物路径提示"（file 族兜底用，防止拿无关文件的内容冒充交付物）。
+ * 例：`docs/02-external-research-summary.md`、`src/math.js`、`docs/`（目录级）。
+ */
+function deliverableHints(desc: string): string[] {
+  const out = new Set<string>();
+  const tokens = desc.match(
+    /[A-Za-z0-9_\-./\\]+\.(?:md|js|ts|json|py|txt|yml|yaml|toml|cfg|sh|ps1|css|html)\b|(?:docs|src|lib|config|test|scripts|build|dist|report)(?:[/\\][A-Za-z0-9_\-./\\]*)?/g
+  ) ?? [];
+  for (const t of tokens) {
+    const norm = t.replace(/\\/g, '/');
+    if (norm.length >= 3) {
+      out.add(norm);
+    }
+  }
+  return [...out];
+}
+
+/** 证据 payload 路径（无则空串）。 */
+function payloadPath(captured: CapturedEvidence): string {
+  const p = (captured.payload as { path?: unknown } | undefined)?.path;
+  return typeof p === 'string' ? p.replace(/\\/g, '/') : '';
+}
+
+/**
  * file 族兜底：exact selector 无匹配时，选作用域内同族（evidenceTypesCompatible）真实证据中
  * 最高 committed seq 的一条（排除与 exact selector 同 tool+argsHash 的 ref，避免回绑失败证据）。
- * blob 缺失/损坏/类型不兼容 → 跳过该候选。
+ * 路径对齐：AC 描述含交付物路径时，候选证据的 payload.path 必须包含该路径提示
+ * （防止"写别的文件但内容符合"冒充交付物）。blob 缺失/损坏/类型不兼容 → 跳过该候选。
  */
 async function bindFamilyFallback(ac: AcceptanceCriterion, ctx: BindingContext, selector: SelectorV1): Promise<BoundOutcome | undefined> {
+  const hints = deliverableHints(ac.desc);
   const candidates = ctx.refs
     .filter(
       (ref) =>
@@ -162,6 +188,12 @@ async function bindFamilyFallback(ac: AcceptanceCriterion, ctx: BindingContext, 
     const captured = await parseCaptured(bytes);
     if (!captured || !evidenceTypesCompatible(captured.evidenceType, selector.evidenceType)) {
       continue;
+    }
+    if (hints.length > 0) {
+      const p = payloadPath(captured);
+      if (p === '' || !hints.some((h) => p.includes(h))) {
+        continue; // 交付物路径未对齐 → 不接受（防无关文件冒充）
+      }
     }
     const bound: BoundEvidence = {
       ...captured,

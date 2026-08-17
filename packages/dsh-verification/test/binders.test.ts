@@ -210,6 +210,37 @@ describe('bindSelectorForAc (v9.2 family fallback — 完成任务能力修复)'
     );
     expect(outcome.kind).toBe('no-evidence');
   });
+
+  it('familyFallback REJECTS evidence from a DIFFERENT path (desc names src/math.js, evidence is src/other.js)', async () => {
+    const store = createMemoryBlobStore();
+    const globArgs = { pattern: 'src/*.js' };
+    const wrongArgs = { path: 'src/other.js', content: 'export function isEven(n) { return n % 2 === 0; }' };
+    const stored = await storePayload(store, fileCaptured('edit', wrongArgs, 'file_diff', { path: 'src/other.js', content: 'export function isEven(n) { return n % 2 === 0; }' }));
+    const outcome = await bindSelectorForAc(
+      { id: 'AC1', desc: 'src/math.js contains "export function isEven"', oracleHint: 'file', selector: selector('glob', hash(globArgs), 'quote_with_location') },
+      { contractIdentity: identity, refs: [ref('call-1', 'edit', wrongArgs, 'file_diff', 9, stored.blobKey)], captureFailures: [], loadBlob: (k) => store.read(k) },
+      () => 'quote_with_location',
+      { familyFallback: true }
+    );
+    expect(outcome.kind).toBe('no-evidence');
+  });
+
+  it('familyFallback ACCEPTS evidence whose path matches the desc (src/math.js)', async () => {
+    const store = createMemoryBlobStore();
+    const globArgs = { pattern: 'src/*.js' };
+    const rightArgs = { path: 'src/math.js', content: 'export function isEven(n) { return n % 2 === 0; }' };
+    const stored = await storePayload(store, fileCaptured('edit', rightArgs, 'file_diff', { path: 'src/math.js', content: 'export function isEven(n) { return n % 2 === 0; }' }));
+    const outcome = await bindSelectorForAc(
+      { id: 'AC1', desc: 'src/math.js contains "export function isEven"', oracleHint: 'file', selector: selector('glob', hash(globArgs), 'quote_with_location') },
+      { contractIdentity: identity, refs: [ref('call-1', 'edit', rightArgs, 'file_diff', 9, stored.blobKey)], captureFailures: [], loadBlob: (k) => store.read(k) },
+      () => 'quote_with_location',
+      { familyFallback: true }
+    );
+    expect(outcome.kind).toBe('bound');
+    if (outcome.kind === 'bound') {
+      expect(outcome.familyFallback).toBe(true);
+    }
+  });
 });
 
 describe('findDuplicateSelectors', () => {
