@@ -2,6 +2,7 @@
   "name": "dsh-verification-workspace",
   "private": true,
   "version": "1.0.0",
+  "packageManager": "pnpm@11.5.2",
   "repository": { "type": "git", "url": "git+https://github.com/bpc-oss/dsh-verification.git" },
   "description": "Bobby verification engine ported to DeepSeek Harness (DSH) Cordis plugins",
   "type": "module",

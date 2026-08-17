@@ -52,6 +52,7 @@
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
+    "bench": "vitest run bench/run-benchmark.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   }
 }
