@@ -98,6 +98,23 @@
 
 > 诚实声明：合成 benchmark 的 100% 召回率是"引擎按冻结 selector 判定"的能力；真实数据暴露的"selector/绑定与现实交付方式错配"假阴性，已由 v9.2 family fallback 修复（`binders.test.ts` 新增 4 条回归测试）。
 
+## 五之四、公认任务 × 对照组（完成任务能力 vs 拦截）
+
+5 类标准 agent 任务原型（文件写入 / 测试运行 / 代码修改 / 报告产出 / 命令执行），每类两个变体
+（真实完成 vs 伪造完成），走完整服务链路；对照组 = 无引擎（凭 agent 自述直接放行）。`bench/task-suite.test.ts` 可复现：
+
+| 任务 | 真实完成 → gate | 伪造完成 → gate | 对照组（naive） |
+|---|---|---|---|
+| file-write | done ✓ | failed ✓ | accepted（伪造溜过） |
+| test-run | done ✓ | failed ✓ | accepted |
+| code-edit | done ✓ | failed ✓ | accepted |
+| report | done ✓ | failed ✓ | accepted |
+| command | done ✓ | failed ✓ | accepted |
+
+**结果**：引擎**真实完成 5/5 放行**（完成能力不受损）· **伪造完成 5/5 拦截**；对照组 **10/10 全部接受——5 个伪造完成溜过**。
+
+> 对照组首跑即暴露并修复真实缺陷：family 兜底曾放行"改错文件但内容符合"的伪造完成（edit `src/other.js` 冒充 `src/math.js`）——已修复为**证据路径须与 AC 描述交付物对齐**（`binders.ts` deliverableHints + 2 条回归测试）。这正是对照组存在的意义。
+
 ## 六、还缺什么（开源前建议补齐）
 
 1. **with/without 对比**：同一任务开/关引擎，对比交付物真实存在性、测试通过率（直接量化增益）

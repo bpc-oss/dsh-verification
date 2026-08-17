@@ -56,7 +56,7 @@
   "scripts": {
     "build": "tsup",
     "test": "vitest run",
-    "bench": "vitest run bench/run-benchmark.test.ts",
+    "bench": "vitest run bench/",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "homepage": "https://github.com/bpc-oss/dsh-verification",
