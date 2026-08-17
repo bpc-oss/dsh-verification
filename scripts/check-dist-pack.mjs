@@ -19,8 +19,8 @@ const tmp = mkdtempSync(join(tmpdir(), 'dsh-dist-check-'));
 let ok = true;
 
 const sha512hex = (buf) => createHash('sha512').update(buf).digest('hex');
-/** 行尾归一化：避免 Windows(CRLF)/Linux(LF) 检出差异污染内容比较。 */
-const normalize = (buf) => buf.toString('utf8').replace(/\r\n/g, '\n');
+/** 行尾归一化：原始 CRLF→LF，另处理 JSON 内转义的 \r\n（sourcemap sourcesContent 的 Windows 遗留）。 */
+const normalize = (buf) => buf.toString('utf8').replace(/\r\n/g, '\n').replace(/\\r\\n/g, '\\n');
 
 function treeFiles(root) {
   const out = [];

@@ -1,0 +1,13 @@
+# 全仓统一 LF（跨平台构建确定性）：源码行尾一致 → sourcemap sourcesContent 一致 → 发布物可复现。
+* text=auto eol=lf
+
+# Windows 脚本类保留 CRLF（如有）
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# 二进制
+*.tgz binary
+*.png binary
+*.ico binary
+*.woff2 binary
