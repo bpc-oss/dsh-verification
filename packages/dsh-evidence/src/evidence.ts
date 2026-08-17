@@ -134,10 +134,10 @@ export type VerdictResult = z.infer<typeof VerdictResultSchema>;
 export const OracleTierSchema = z.enum(['T0', 'T1', 'T2', 'T3', 'T4']);
 export type OracleTier = z.infer<typeof OracleTierSchema>;
 
-/** 裁决（v9）：携带 contractIdentity 快照；gate 全等比较。 */
+/** 裁决（v9）：携带 contractIdentity 快照；gate 全等比较。claimId 允许空串以兼容旧版无证据裁决记录。 */
 export const VerdictSchema = z
   .object({
-    claimId: z.string().min(1),
+    claimId: z.string(),
     acId: z.string().min(1),
     result: VerdictResultSchema,
     oracleTier: OracleTierSchema,

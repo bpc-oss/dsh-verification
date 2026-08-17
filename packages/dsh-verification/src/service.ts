@@ -871,7 +871,7 @@ export class VerificationService extends Service {
         outcome && outcome.kind !== 'not-harnessed'
           ? (outcome as Extract<BoundOutcome, { kind: 'capture-failure' | 'missing-blob' | 'no-evidence' }>).reason
           : `AC ${ac.id} has no bound evidence (no exact selector match)`;
-      return { claimId: '', acId: ac.id, result: 'fail', oracleTier: 'T3', contractIdentity: identity, detail: reason };
+      return { claimId: ac.id, acId: ac.id, result: 'fail', oracleTier: 'T3', contractIdentity: identity, detail: reason };
     }
     if (ac.oracleHint === 'human') {
       return { claimId: bound.callId, acId: ac.id, result: 'need_human', oracleTier: 'T4', contractIdentity: identity, detail: 'AC requires human confirmation' };
