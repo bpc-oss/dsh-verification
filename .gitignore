@@ -1,0 +1,8 @@
+node_modules/
+dist/
+lib/
+*.log
+.DS_Store
+.tmp-profile-pkgs/
+.agent-os/
+.superpowers/

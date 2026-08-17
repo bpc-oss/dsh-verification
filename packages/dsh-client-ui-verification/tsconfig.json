@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "lib",
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@bpc-oss/dsh-evidence": ["../dsh-evidence/src/index.ts"],
+      "@bpc-oss/dsh-verification": ["../dsh-verification/src/index.ts"]
+    }
+  },
+  "include": ["src"]
+}

@@ -1,0 +1,8 @@
+packages:
+  - packages/*
+  - vendor/@deepseek-ai/*
+overrides:
+  '@deepseek-ai/dsh-goal': link:vendor/@deepseek-ai/dsh-goal
+allowBuilds:
+  esbuild: true
+minimumReleaseAge: 0

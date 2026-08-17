@@ -1,0 +1,56 @@
+# verification 插件补丁层示例（v9）
+#
+# 把 verification（host）与 client-ui-verification（web）挂到现有 agent preset 上。
+# 依赖以 out-of-tree 插件安装到 profile 的 node_modules：
+#   pnpm add @bpc-oss/dsh-verification @bpc-oss/dsh-client-ui-verification
+#
+# v9 语义要点：
+#  - 完成闸门 = tools/pre-execute 同步拦截（模型路径）+ CompletionPermit/GoalTransitionGuard seam +
+#    strict replay validator（事件顺序与 envelope TTL 权威）。rc.6 未合入 GoalService seam 时，
+#    直接调用 ctx.goals.complete() 的第三方插件不受本插件护栏（见 README「上游 seam」节）。
+#  - T2 Pro 对抗审查依赖 upstream authorityIsolation capability：rc.6 无 → 默认关闭。
+
+# ── host：验证引擎 ─────────────────────────────────────────────
+- id: verification
+  name: '@bpc-oss/dsh-verification'
+  config:
+    mode: enforce               # enforce | advisory（enforce 无契约即 deny missing_contract）
+    maxCapturedEvidence: 200    # 每契约捕获上限；超限写 durable capture-failure，gate fail closed
+    maxCapturedBytes: 20971520  # 20MB；单条证据 256KB 上限之上截断并标记 completeness
+    completionPermitTtlMs: 30000
+    oracles:
+      deterministic: true
+      assistantResponse: true
+      coverage: { enabled: true }
+      proReview:
+        enabled: false          # v9：authorityIsolation upstream seam 前默认关闭
+        provider: spawn
+        maxDefects: 10
+    constraints: []             # 部署级禁令 [{id, desc, check: 'path:src/legacy' | 'network:'}]
+    intent:
+      contractOrigin: independent-capture   # independent-capture | human-confirmed
+      freezeOnHumanConfirm: true
+      consensusCount: 1         # 0..3；>1 时开启结构化共识（固定次数独立采样）
+      # provider: deepseek      # independent-capture 生成契约时需要的 LLM 路由
+      # model: deepseek-chat
+      readOnlyToolAllowlist:
+        - read_file
+        - list_dir
+        - glob
+        - grep
+        - search
+        - ask_user
+        - ask_user_question
+        - get_goal
+        - get_verification_plan
+        - web_search
+      sourceBasis:
+        includeAttachments: true
+        includeControlDocs: true
+        maxEntries: 200
+    # blobDir: .dsh/verification-blobs   # 内容寻址 blob 持久化目录；缺省内存实现（进程内）
+    systemPromptSection: true
+
+# ── client：web 验证面板（契约卡片含 frozen selector / 逐 AC 裁决 / 证据列表 / 设置节）─
+- id: client-ui-verification
+  name: '@bpc-oss/dsh-client-ui-verification'

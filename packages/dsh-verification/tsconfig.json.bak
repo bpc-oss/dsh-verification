@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "lib",
+    "baseUrl": ".",
+    "paths": {
+      "@bpc-oss/dsh-evidence": ["../dsh-evidence/src/index.ts"]
+    }
+  },
+  "include": ["src"]
+}
