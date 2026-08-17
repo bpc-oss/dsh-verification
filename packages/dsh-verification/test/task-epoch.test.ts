@@ -32,9 +32,13 @@ describe('foldTaskEpochs (v9: goal-bound, no goal-less epoch)', () => {
     expect(epochs[0]!.status).toBe('active');
   });
 
-  it('FAILS CLOSED: create without a prior authoritative user message builds no epoch', () => {
+  it('v11 fallback: create without a prior authoritative user message anchors rootSeq at the goal create itself (no fail-closed)', () => {
     const events = [userEvent(0, 'goal'), createEvent(1)];
-    expect(foldTaskEpochs(events, 's-1')).toHaveLength(0);
+    const epochs = foldTaskEpochs(events, 's-1');
+    expect(epochs).toHaveLength(1);
+    expect(epochs[0]!.rootGoalId).toBe('g1');
+    expect(epochs[0]!.rootSeq).toBe(1);
+    expect(epochs[0]!.status).toBe('active');
   });
 
   it('closes the epoch from the root goal terminal event', () => {
@@ -77,5 +81,18 @@ describe('applyEpochEvent (incremental parity)', () => {
       state = applyEpochEvent(state, event, 's-1');
     }
     expect(state.epochs).toEqual(batch);
+  });
+
+  it('incremental fold matches batch fold for the no-user-message fallback (rootSeq = create seq)', () => {
+    const events = [userEvent(0, 'goal'), createEvent(1), completeEvent(2), createEvent(3, 'g2')];
+    const batch = foldTaskEpochs(events, 's-1');
+    let state = emptyIncrementalEpochState();
+    for (const event of events) {
+      state = applyEpochEvent(state, event, 's-1');
+    }
+    expect(state.epochs).toEqual(batch);
+    const g2 = state.epochs.find((epoch) => epoch.rootGoalId === 'g2');
+    expect(g2).toBeDefined();
+    expect(g2!.rootSeq).toBe(3);
   });
 });

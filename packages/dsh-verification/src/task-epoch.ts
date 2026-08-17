@@ -3,7 +3,9 @@
  * 权威来源：`dsh-plugin-port-plan.md` §1（v11 第 10 条）与 P0-1 文档 §4.4。
  * 规则：
  *  - 只有成功 committed 的 root `goal/change create` 建立 epoch（session 内单 live goal，故 session 内 create = root）；
- *  - `rootSeq` = create 事件之前、上一 closed epoch 之后最近一条权威用户消息；无此消息 → 不建 epoch（fail closed）；
+ *  - `rootSeq` = create 事件之前、上一 closed epoch 之后最近一条权威用户消息；
+ *    无此消息时**不再 fail-closed**（v11 放宽）：以 goal create 自身 seq 作为 rootSeq 建立 epoch——
+ *    agent/UI 侧创建的目标（无前置用户消息）同样可用，避免"无活跃 epoch"把写工具整体锁死；
  *  - `epochId = sha256(sessionId:goalId:createSeq)`；
  *  - close 由该 rootGoalId 的 committed complete/clear 事件确定性派生；observer 不写额外事件；
  *  - 子 goal（其他 session）不参与本 session fold。
@@ -88,8 +90,9 @@ export function foldTaskEpochs(events: readonly GoalLogEvent[], sessionId: strin
           }
         }
         if (rootSeq < 0) {
-          // fail closed：无权威用户消息 → 不建 epoch
-          continue;
+          // v11 放宽：窗口内无权威用户消息（agent/UI 侧创建的目标）→ 以 goal create 自身为任务起点。
+          // 不再 fail-closed 拒绝，避免"无活跃 epoch"连带锁死写工具（advisory 模式本应放行）。
+          rootSeq = event.seq;
         }
         const epoch: FoldedEpoch = {
           epochId: deriveEpochId(sessionId, change.goal.id, event.seq),
@@ -157,11 +160,9 @@ export function applyEpochEvent(state: IncrementalEpochState, event: GoalLogEven
     if (currentActiveEpoch(state.epochs)) {
       return state;
     }
-    // rootSeq 由批处理 fold 解析（增量下退化为：取最近权威用户消息 seq；无则 -1 → 不建）
-    const rootSeq = state.lastUserSeqOutsideActive;
-    if (rootSeq < 0) {
-      return { ...state, pendingCreate: { goalId: change.goal.id, eventSeq: event.seq } };
-    }
+    // rootSeq 由批处理 fold 解析（增量下退化为：取最近权威用户消息 seq；
+    // 无则 v11 放宽：以 goal create 自身 seq 为起点立即建 epoch，不再挂起等待）。
+    const rootSeq = state.lastUserSeqOutsideActive >= 0 ? state.lastUserSeqOutsideActive : event.seq;
     const epoch: FoldedEpoch = {
       epochId: deriveEpochId(sessionId, change.goal.id, event.seq),
       rootSeq,
