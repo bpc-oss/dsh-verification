@@ -139,7 +139,9 @@ export const Config: z<VerificationConfig> = z.object({
     })
   }),
   blobDir: z.string(),
-  systemPromptSection: z.boolean().default(true)
+  systemPromptSection: z.boolean().default(true),
+  // 2026-08-17（完成任务能力修复）：file 族 AC 精确绑定失败时启用族内证据兜底，减少假阴性。默认开启；安全严格场景可关。
+  binderFamilyFallback: z.boolean().default(true)
 });
 
 export interface VerificationConfig {
@@ -166,6 +168,7 @@ export interface VerificationConfig {
   };
   blobDir?: string;
   systemPromptSection: boolean;
+  binderFamilyFallback: boolean;
 }
 
 export function resolveConfig(config: Partial<VerificationConfig>): VerificationConfig {
@@ -201,7 +204,8 @@ export function resolveConfig(config: Partial<VerificationConfig>): Verification
       }
     },
     ...(config.blobDir !== undefined ? { blobDir: config.blobDir } : {}),
-    systemPromptSection: config.systemPromptSection ?? true
+    systemPromptSection: config.systemPromptSection ?? true,
+    binderFamilyFallback: config.binderFamilyFallback ?? true
   };
 }
 
@@ -218,6 +222,7 @@ export function computeConfigHash(config: VerificationConfig): string {
     },
     maxCapturedEvidence: config.maxCapturedEvidence,
     maxCapturedBytes: config.maxCapturedBytes,
+    binderFamilyFallback: config.binderFamilyFallback ? 1 : 0,
     schemaVersion: 1
   });
 }
@@ -255,6 +260,7 @@ export function apply(ctx: Context, config: Partial<VerificationConfig>): void {
         maxEntries: resolved.intent.sourceBasis.maxEntries
       },
       readOnlyToolAllowlist: resolved.intent.readOnlyToolAllowlist,
+      binderFamilyFallback: resolved.binderFamilyFallback,
       askUser: resolveAskUser(ctx)
     },
     { store }

@@ -22,10 +22,20 @@ export interface BindingContext {
 
 export type BoundOutcome =
   | { kind: 'not-harnessed'; reason: string }
-  | { kind: 'bound'; evidence: BoundEvidence; resultSeq: number }
+  | { kind: 'bound'; evidence: BoundEvidence; resultSeq: number; familyFallback?: boolean }
   | { kind: 'no-evidence'; reason: string }
   | { kind: 'missing-blob'; reason: string }
   | { kind: 'capture-failure'; reason: string };
+
+export interface BindOptions {
+  /**
+   * 2026-08-17（完成任务能力修复）：file 族兜底。
+   * exact selector 无匹配时，允许用作用域内同族真实证据（file_diff/file_exists/quote_with_location 互认，
+   * 任意工具产生均可）绑定——避免"交付物由 write/edit 产生而冻结 selector 是 glob/read"导致的假阴性。
+   * 安全语义：仅当 exact 无匹配时启用；绑定结果带 familyFallback 标记，裁决 detail 注明，可审计。
+   */
+  familyFallback?: boolean;
+}
 
 function identityMatches(ref: { contractIdentity: ContractIdentity }, identity: ContractIdentity): boolean {
   return (
@@ -69,7 +79,8 @@ async function parseCaptured(bytes: Uint8Array): Promise<CapturedEvidence | null
 export async function bindSelectorForAc(
   ac: AcceptanceCriterion,
   ctx: BindingContext,
-  evidenceTypeFor: (ac: AcceptanceCriterion) => EvidenceType
+  evidenceTypeFor: (ac: AcceptanceCriterion) => EvidenceType,
+  opts: BindOptions = {}
 ): Promise<BoundOutcome> {
   const selector = ac.selector;
   if (!selector) {
@@ -96,6 +107,12 @@ export async function bindSelectorForAc(
   }
 
   if (topKind === undefined) {
+    if (opts.familyFallback) {
+      const family = await bindFamilyFallback(ac, ctx, selector);
+      if (family !== undefined) {
+        return family;
+      }
+    }
     return { kind: 'no-evidence', reason: `AC ${ac.id}: no committed run for selector (${selector.toolIdentity}, ${selector.normalizedArgsHash.slice(0, 8)}, ${selector.evidenceType})` };
   }
   if (topKind === 'failure') {
@@ -120,6 +137,41 @@ export async function bindSelectorForAc(
     selectorRef: selectorRefOf(ctx.contractIdentity, ac.id)
   };
   return { kind: 'bound', evidence: bound, resultSeq: topSeq };
+}
+
+/**
+ * file 族兜底：exact selector 无匹配时，选作用域内同族（evidenceTypesCompatible）真实证据中
+ * 最高 committed seq 的一条（排除与 exact selector 同 tool+argsHash 的 ref，避免回绑失败证据）。
+ * blob 缺失/损坏/类型不兼容 → 跳过该候选。
+ */
+async function bindFamilyFallback(ac: AcceptanceCriterion, ctx: BindingContext, selector: SelectorV1): Promise<BoundOutcome | undefined> {
+  const candidates = ctx.refs
+    .filter(
+      (ref) =>
+        identityMatches(ref, ctx.contractIdentity) &&
+        evidenceTypesCompatible(ref.evidenceType, selector.evidenceType) &&
+        !(ref.toolIdentity === selector.toolIdentity && ref.normalizedArgsHash === selector.normalizedArgsHash)
+    )
+    .sort((a, b) => b.resultSeq - a.resultSeq);
+
+  for (const chosen of candidates) {
+    const bytes = await ctx.loadBlob(chosen.blobHash);
+    if (!bytes) {
+      continue;
+    }
+    const captured = await parseCaptured(bytes);
+    if (!captured || !evidenceTypesCompatible(captured.evidenceType, selector.evidenceType)) {
+      continue;
+    }
+    const bound: BoundEvidence = {
+      ...captured,
+      callId: chosen.callId,
+      acId: ac.id,
+      selectorRef: selectorRefOf(ctx.contractIdentity, ac.id)
+    };
+    return { kind: 'bound', evidence: bound, resultSeq: chosen.resultSeq, familyFallback: true };
+  }
+  return undefined;
 }
 
 /** 契约生成期校验：两个 AC 使用同一 exact selector → 拒绝契约。 */

@@ -91,12 +91,12 @@
 - 但该 glob 返回 "No files found"（疑似 Windows 正斜杠路径/工具行为），且 **write→file_diff 证据（57 条，路径精确匹配交付物）因不匹配冻结 selector 从未被绑定**；
 - 结果：真实完成的任务被 gate 判 fail → **假阴性**。
 
-**结论与改进方向**：真实任务上引擎的"拦截"包含假拒绝——selector 冻结是 exact-only，交付物若由其他工具（write/edit）产生则永远验证不到。开源前必须改进：
-1. **绑定期证据族感知**（binder 复用已有 `EVIDENCE_FAMILIES`：file_diff/file_exists/quote_with_location 互认）——file 类 AC 在 exact selector 证据缺失时，允许用作用域内真实文件证据裁决（带注明），减少误拒；
-2. **selector 冻结引导**：set_verification_plan 的提示让 agent 按实际工作工具冻结 selector；
-3. 把"完成任务能力"（假拒绝率）纳入 benchmark 指标，与"拦截率"并列。
+**结论与修复（v9.2 已落地）**：真实任务暴露的假阴性源于 selector exact-only 绑定——交付物由 write/edit 产生时，冻结成 glob/read 的 selector 验证不到。已实现：
+1. **绑定期证据族感知**（`binders.ts` + `service.ts`）：`binderFamilyFallback`（默认 true）——file 族 AC 精确绑定裁决失败时，用作用域内同族真实文件证据兜底重判（detail 注明 family evidence fallback，可审计；配置可关，安全严格场景可回退 exact-only）；
+2. **selector 冻结引导**：`set_verification_plan` 描述 + 系统提示新增"按实际工作工具冻结 selector（文件交付用 write/edit→file_diff 而非 glob/read）"；
+3. **假拒绝率入 benchmark**：`scripts/task-completion-eval.py` 将交付物存在性 × 裁决交叉验证作为常态化评估，与拦截率并列。
 
-> 诚实声明：合成 benchmark 的 100% 召回率是"引擎按冻结 selector 判定"的能力；真实数据暴露的是"selector/绑定与现实交付方式错配"导致的假阴性——这是开源前必须解决的可靠性议题。
+> 诚实声明：合成 benchmark 的 100% 召回率是"引擎按冻结 selector 判定"的能力；真实数据暴露的"selector/绑定与现实交付方式错配"假阴性，已由 v9.2 family fallback 修复（`binders.test.ts` 新增 4 条回归测试）。
 
 ## 六、还缺什么（开源前建议补齐）
 

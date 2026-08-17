@@ -129,6 +129,9 @@ create_goal（bootstrap 白名单，建 goal-bound epoch；rootSeq = create 前�
 
 - `mode`: `advisory`（默认，记录+放行，never-deny）/ `enforce`（验收/评测显式开启；无契约时仅
   写入类工具 deny missing_contract，只读工具 read/grep/glob 永不拦）
+- `binderFamilyFallback`（默认 `true`）：file 族 AC 精确 selector 无有效证据时，允许用作用域内
+  同族真实文件证据（file_diff/file_exists/quote_with_location 互认）兜底裁决（裁决 detail 注明，
+  可审计），避免"交付物由 write/edit 产生而 selector 冻结成 glob/read"导致的假阴性；安全严格场景可关
 - `maxCapturedEvidence`（200）/ `maxCapturedBytes`（20MB）——超限写 durable capture-failure，gate fail closed
 - `completionPermitTtlMs`（30s，冻结进 configHash；replay TTL 由 SessionEvent envelope 权威派生）
 - `intent.contractOrigin`: `independent-capture` / `human-confirmed`（人类确认复用 dsh approval 通道）

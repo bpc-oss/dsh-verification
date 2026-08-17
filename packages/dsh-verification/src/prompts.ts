@@ -67,7 +67,8 @@ export function buildVerificationGuidance(config: {
     'Use the verification tools for any multi-step task with a checkable outcome.',
     `set_verification_plan declares the intent contract: goal, acceptance criteria (each with an oracle_hint of test|run|file|schema|review|human), and machine-checkable constraints (path:<prefix> or network:).`,
     'Keep every acceptance criterion a verifiable fact; never use "done", "checked", or "verified" as evidence.',
-    'Tool results in this session are the only admissible evidence. If you claim something, the session must contain the tool call that produced it.'
+    'Tool results in this session are the only admissible evidence. If you claim something, the session must contain the tool call that produced it.',
+    'Selector guidance: freeze the evidence selector on the tool you will actually use to produce the deliverable (for file deliverables prefer write/edit → file_diff or file_exists; avoid glob/read selectors that can report empty even when the files exist).'
   ];
   if (config.mode === 'enforce') {
     lines.push('Before calling update_goal with action complete, every acceptance criterion must have a passing verdict; otherwise the completion gate will reject the call and return the defect list to fix.');

@@ -68,6 +68,8 @@ export interface VerificationRuntimeConfig {
     maxEntries: number;
   };
   readOnlyToolAllowlist: string[];
+  /** 2026-08-17：file 族 AC 精确绑定失败时启用族内证据兜底（减少假阴性）。 */
+  binderFamilyFallback: boolean;
   /** 人类确认通道（P0-1 review：apply 注入 dsh approval/service；测试可注入；agent+decision 上下文随附）。 */
   askUser?: (question: { agent: Agent; questionId: string; text: string; choices: string[] }) => Promise<string | undefined>;
 }
@@ -75,6 +77,17 @@ export interface VerificationRuntimeConfig {
 export interface ServiceDeps {
   store?: BlobStore;
   clock?: () => number;
+}
+
+/** file 证据族（与 dsh-evidence EVIDENCE_FAMILIES 一致）；用于判定某 AC 是否可做族内兜底。 */
+const FILE_FAMILY_TYPES = ['file_diff', 'file_exists', 'quote_with_location'] as const;
+
+function isFileFamilyAc(ac: import('@bpc-oss/dsh-evidence').AcceptanceCriterion): boolean {
+  if (ac.oracleHint === 'file') {
+    return true;
+  }
+  const t = ac.selector?.evidenceType;
+  return t !== undefined && (FILE_FAMILY_TYPES as readonly string[]).includes(t);
 }
 
 export class VerificationError extends Error {
@@ -854,6 +867,38 @@ export class VerificationService extends Service {
     const verdicts = new Map<string, Verdict>();
     for (const ac of contract.acceptanceCriteria) {
       verdicts.set(ac.id, await this.judgeAc(agent, contract, ac, boundMap.get(ac.id), bindings.get(ac.id)));
+    }
+
+    // 2026-08-17（完成任务能力修复）：file 族 AC 精确绑定裁决失败 → 族内兜底重判。
+    // 真实案例：ac-research 冻结 glob selector 的匹配调用返回空（"No files found"），
+    // 而 write→file_diff 真实交付证据存在却不被 exact 绑定考虑 → 假阴性。
+    // 兜底：exact 裁决 fail 时，用 bindSelectorForAc(familyFallback) 重绑族内真实文件证据重判；
+    // 重判 pass → 采用（detail 注明 family evidence fallback，可审计）；仍 fail → 保留原裁决。
+    if (this.config.binderFamilyFallback !== false) {
+      for (const ac of contract.acceptanceCriteria) {
+        const v0 = verdicts.get(ac.id);
+        if (!v0 || v0.result !== 'fail' || !isFileFamilyAc(ac)) {
+          continue;
+        }
+        const fb = await bindSelectorForAc(
+          ac,
+          {
+            contractIdentity: identity,
+            refs: scopedProjection.evidenceRefs,
+            captureFailures: scopedProjection.captureFailures,
+            loadBlob: async (key) => this.store.read(key)
+          },
+          (ac2) => hintToEvidenceType(ac2.oracleHint),
+          { familyFallback: true }
+        );
+        if (fb.kind === 'bound' && fb.familyFallback) {
+          const v1 = await this.judgeAc(agent, contract, ac, fb.evidence, fb);
+          if (v1.result === 'pass') {
+            v1.detail = `${v1.detail ?? ''}（family evidence fallback: exact selector ${ac.selector?.toolIdentity ?? ''} 无有效证据，改用族内真实文件证据 ${fb.evidence.toolIdentity}→${fb.evidence.evidenceType} seq${fb.resultSeq}）`.trim();
+            verdicts.set(ac.id, v1);
+          }
+        }
+      }
     }
 
     // 约束执行上下文 = 实时派生的路径/网络事实 ∪ 持久化 policyFacts（blob 写入失败等场景也 fail closed）。

@@ -135,6 +135,83 @@ describe('bindSelectorForAc (v9.1 file-family compatibility)', () => {
   });
 });
 
+describe('bindSelectorForAc (v9.2 family fallback — 完成任务能力修复)', () => {
+  function fileCaptured(tool: string, args: Record<string, unknown>, type: EvidenceType, payload: Record<string, unknown>) {
+    return { callId: 'x', toolIdentity: tool, schemaVersion: 1, normalizedArgs: args, normalizedArgsHash: hash(args), evidenceType: type, payload, producedBy: 'tool' as const, failed: false, contractIdentity: identity };
+  }
+
+  it('familyFallback binds a real write→file_diff when the exact glob selector has no committed run', async () => {
+    const store = createMemoryBlobStore();
+    const globArgs = { pattern: 'docs/*.md' };
+    const writeArgs = { path: 'docs/design.md', content: 'architecture: ok' };
+    const stored = await storePayload(store, fileCaptured('write', writeArgs, 'file_diff', { path: 'docs/design.md', content: 'architecture: ok' }));
+    const outcome = await bindSelectorForAc(
+      { id: 'AC1', desc: 'docs exist', oracleHint: 'file', selector: selector('glob', hash(globArgs), 'quote_with_location') },
+      { contractIdentity: identity, refs: [ref('call-1', 'write', writeArgs, 'file_diff', 9, stored.blobKey)], captureFailures: [], loadBlob: (k) => store.read(k) },
+      () => 'quote_with_location',
+      { familyFallback: true }
+    );
+    expect(outcome.kind).toBe('bound');
+    if (outcome.kind === 'bound') {
+      expect(outcome.familyFallback).toBe(true);
+      expect(outcome.evidence).toMatchObject({ toolIdentity: 'write', evidenceType: 'file_diff', acId: 'AC1' });
+    }
+  });
+
+  it('familyFallback does NOT hijack when an exact match exists (exact wins)', async () => {
+    const store = createMemoryBlobStore();
+    const globArgs = { pattern: 'docs/*.md' };
+    const writeArgs = { path: 'docs/design.md', content: 'architecture: ok' };
+    const globStored = await storePayload(store, fileCaptured('glob', globArgs, 'quote_with_location', { quote: 'No files found' }));
+    const writeStored = await storePayload(store, fileCaptured('write', writeArgs, 'file_diff', { path: 'docs/design.md', content: 'architecture: ok' }));
+    const outcome = await bindSelectorForAc(
+      { id: 'AC1', desc: 'docs exist', oracleHint: 'file', selector: selector('glob', hash(globArgs), 'quote_with_location') },
+      {
+        contractIdentity: identity,
+        refs: [
+          ref('call-glob', 'glob', globArgs, 'quote_with_location', 10, globStored.blobKey),
+          ref('call-write', 'write', writeArgs, 'file_diff', 9, writeStored.blobKey)
+        ],
+        captureFailures: [],
+        loadBlob: (k) => store.read(k)
+      },
+      () => 'quote_with_location',
+      { familyFallback: true }
+    );
+    expect(outcome.kind).toBe('bound');
+    if (outcome.kind === 'bound') {
+      expect(outcome.familyFallback).toBeUndefined();
+      expect(outcome.evidence.toolIdentity).toBe('glob');
+    }
+  });
+
+  it('without familyFallback the exact-only behavior is unchanged (no-evidence)', async () => {
+    const store = createMemoryBlobStore();
+    const globArgs = { pattern: 'docs/*.md' };
+    const writeArgs = { path: 'docs/design.md', content: 'architecture: ok' };
+    const stored = await storePayload(store, fileCaptured('write', writeArgs, 'file_diff', { path: 'docs/design.md', content: 'architecture: ok' }));
+    const outcome = await bindSelectorForAc(
+      { id: 'AC1', desc: 'docs exist', oracleHint: 'file', selector: selector('glob', hash(globArgs), 'quote_with_location') },
+      { contractIdentity: identity, refs: [ref('call-1', 'write', writeArgs, 'file_diff', 9, stored.blobKey)], captureFailures: [], loadBlob: (k) => store.read(k) },
+      () => 'quote_with_location'
+    );
+    expect(outcome.kind).toBe('no-evidence');
+  });
+
+  it('familyFallback skips corrupt/missing family blobs and yields no-evidence', async () => {
+    const store = createMemoryBlobStore();
+    const globArgs = { pattern: 'docs/*.md' };
+    const writeArgs = { path: 'docs/design.md', content: 'architecture: ok' };
+    const outcome = await bindSelectorForAc(
+      { id: 'AC1', desc: 'docs exist', oracleHint: 'file', selector: selector('glob', hash(globArgs), 'quote_with_location') },
+      { contractIdentity: identity, refs: [ref('call-1', 'write', writeArgs, 'file_diff', 9, 'deadbeef')], captureFailures: [], loadBlob: async () => null },
+      () => 'quote_with_location',
+      { familyFallback: true }
+    );
+    expect(outcome.kind).toBe('no-evidence');
+  });
+});
+
 describe('findDuplicateSelectors', () => {
   it('rejects two ACs sharing one exact selector', () => {
     const acs: AcceptanceCriterion[] = [

@@ -22,6 +22,25 @@ const sha512hex = (buf) => createHash('sha512').update(buf).digest('hex');
 /** 行尾归一化：原始 CRLF→LF，另处理 JSON 内转义的 \r\n（sourcemap sourcesContent 的 Windows 遗留）。 */
 const normalize = (buf) => buf.toString('utf8').replace(/\r\n/g, '\n').replace(/\\r\\n/g, '\\n');
 
+/** JSON 键排序规范化：pnpm pack 对 workspace 依赖的重写顺序不稳定，键顺序无语义，比较前统一排序。 */
+function canonicalJson(buf) {
+  const sortKeys = (o) => {
+    if (Array.isArray(o)) return o.map(sortKeys);
+    if (o && typeof o === 'object') {
+      const out = {};
+      for (const k of Object.keys(o).sort()) out[k] = sortKeys(o[k]);
+      return out;
+    }
+    return o;
+  };
+  return JSON.stringify(sortKeys(JSON.parse(buf.toString('utf8'))), null, 2);
+}
+
+function contentBytes(rel, buf) {
+  const text = normalize(buf);
+  return rel.endsWith('.json') ? normalize(Buffer.from(canonicalJson(buf), 'utf8')) : text;
+}
+
 function treeFiles(root) {
   const out = [];
   const walk = (dir, base) => {
@@ -40,13 +59,15 @@ function treeFiles(root) {
 function contentIndex(root) {
   const idx = new Map();
   for (const rel of treeFiles(root)) {
-    idx.set(rel, sha512hex(normalize(readFileSync(join(root, rel)))));
+    idx.set(rel, sha512hex(Buffer.from(contentBytes(rel, readFileSync(join(root, rel))), 'utf8')));
   }
   return idx;
 }
 
 for (const pkg of pkgs) {
-  execSync(`pnpm --filter @bpc-oss/${pkg} pack --pack-destination "${tmp}"`, { cwd: repo, stdio: 'pipe' });
+  // 与 repack 脚本一致：从包目录内 `pnpm pack`（--filter 从根打包会对 package.json 做不同规范化，
+  // 导致依赖顺序与归档不一致）
+  execSync(`pnpm pack --pack-destination "${tmp}"`, { cwd: join(repo, 'packages', pkg), stdio: 'pipe' });
   const fresh = join(tmp, `bpc-oss-${pkg}-1.0.0.tgz`);
   const committed = join(repo, 'dist-pack', `bpc-oss-${pkg}-1.0.0-fixed.tgz`);
   if (!existsSync(committed)) {
