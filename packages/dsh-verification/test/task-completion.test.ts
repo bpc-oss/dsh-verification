@@ -221,4 +221,21 @@ describe('task completion capability (family fallback fixes false rejection of g
     expect(verdicts.AC2?.result).toBe('pass');
     expect(verdicts.AC2?.detail ?? '').toContain('family evidence fallback');
   });
+
+  it('M1 lockout regression: stale plan + no active epoch → getContract degrades to null (no throw, no tool lockout)', async () => {
+    // 2026-08 真实故障：goal complete 后 epoch 关闭，残留 plan + 无活跃 epoch →
+    // 旧引擎 getPlanView 抛 VERIFICATION_MISSING_ROOT_GOAL → 写工具/update_goal complete 全被锁死。
+    // 修复（ef708a8）：getPlanView 降级返回 null → advisory 写工具放行、complete 走无契约路径。
+    const env = makeEnv(true, GRADER);
+    await bootstrapFilePlan(env);
+    // 完成 goal → epoch 关闭
+    await env.svc.captureEvidence(env.agent, { callId: 'w1', name: 'write', arguments: { path: 'docs/r.md', content: 'x' }, isError: false, value: { path: 'docs/r.md', after: 'x' } }, 40);
+    const cur = env.goals.get(env.agent)!;
+    await env.svc.prepareGoalCompletion(env.agent, cur.id, cur.revision);
+    env.goals.complete(env.agent, { id: cur.id, revision: cur.revision });
+    // goal complete → 无活跃 epoch
+    expect(env.svc.getActiveEpoch(env.agent)).toBeUndefined();
+    // 残留 plan 存在，但 getContract 必须降级为 null（不抛错）
+    expect(env.svc.getContract(env.agent)).toBeNull();
+  });
 });
