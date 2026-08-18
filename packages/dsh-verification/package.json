@@ -69,5 +69,10 @@
     "evidence",
     "completion-gate",
     "bobby"
-  ]
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
 }

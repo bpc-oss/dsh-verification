@@ -1,0 +1,4 @@
+# @bpc-oss/dsh-client-ui-verification 独立安装层（dsh plugin add 用）。
+- insert:
+    - id: bpc-verification-client
+      name: "@bpc-oss/dsh-client-ui-verification"

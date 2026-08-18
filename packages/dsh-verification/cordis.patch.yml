@@ -1,0 +1,4 @@
+# @bpc-oss/dsh-verification 独立安装层（dsh plugin add 用）。
+- insert:
+    - id: bpc-verification-engine
+      name: "@bpc-oss/dsh-verification"
