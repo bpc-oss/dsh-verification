@@ -241,6 +241,58 @@ describe('bindSelectorForAc (v9.2 family fallback — 完成任务能力修复)'
       expect(outcome.familyFallback).toBe(true);
     }
   });
+
+  describe('v9.3 run-family fallback (command alignment)', () => {
+    function runCaptured(tool: string, args: Record<string, unknown>, command: string, exitCode: number) {
+      return { callId: 'x', toolIdentity: tool, schemaVersion: 1, normalizedArgs: args, normalizedArgsHash: hash(args), evidenceType: 'command_output' as const, payload: { command, exitCode }, producedBy: 'tool' as const, failed: false, contractIdentity: identity };
+    }
+
+    it('binds a different-args shell evidence whose command matches the AC desc (fib)', async () => {
+      const store = createMemoryBlobStore();
+      const frozenArgs = { command: 'python test_fib.py' };
+      const actualArgs = { command: 'python -c "import fib; print(fib.fib(10))"' };
+      const stored = await storePayload(store, runCaptured('shell', actualArgs, 'python -c "import fib; print(fib.fib(10))"', 0));
+      const outcome = await bindSelectorForAc(
+        { id: 'AC1', desc: 'python 运行 fib(10) 输出 55', oracleHint: 'run', selector: selector('shell', hash(frozenArgs), 'command_output') },
+        { contractIdentity: identity, refs: [ref('call-1', 'shell', actualArgs, 'command_output', 9, stored.blobKey)], captureFailures: [], loadBlob: (k) => store.read(k) },
+        () => 'command_output',
+        { familyFallback: true }
+      );
+      expect(outcome.kind).toBe('bound');
+      if (outcome.kind === 'bound') {
+        expect(outcome.familyFallback).toBe(true);
+        expect((outcome.evidence.payload as { command?: string; exitCode?: number }).command).toContain('fib');
+        expect((outcome.evidence.payload as { exitCode?: number }).exitCode).toBe(0);
+      }
+    });
+
+    it('REJECTS a shell evidence whose command has no AC-aligned token (wrong command)', async () => {
+      const store = createMemoryBlobStore();
+      const frozenArgs = { command: 'python test_fib.py' };
+      const wrongArgs = { command: 'ls -la /tmp' };
+      const stored = await storePayload(store, runCaptured('shell', wrongArgs, 'ls -la /tmp', 0));
+      const outcome = await bindSelectorForAc(
+        { id: 'AC1', desc: 'python 运行 fib(10) 输出 55', oracleHint: 'run', selector: selector('shell', hash(frozenArgs), 'command_output') },
+        { contractIdentity: identity, refs: [ref('call-1', 'shell', wrongArgs, 'command_output', 9, stored.blobKey)], captureFailures: [], loadBlob: (k) => store.read(k) },
+        () => 'command_output',
+        { familyFallback: true }
+      );
+      expect(outcome.kind).toBe('no-evidence');
+    });
+
+    it('without familyFallback the run-family exact-only behavior is unchanged', async () => {
+      const store = createMemoryBlobStore();
+      const frozenArgs = { command: 'python test_fib.py' };
+      const actualArgs = { command: 'python -c "import fib; print(fib.fib(10))"' };
+      const stored = await storePayload(store, runCaptured('shell', actualArgs, 'python -c "import fib; print(fib.fib(10))"', 0));
+      const outcome = await bindSelectorForAc(
+        { id: 'AC1', desc: 'python 运行 fib(10) 输出 55', oracleHint: 'run', selector: selector('shell', hash(frozenArgs), 'command_output') },
+        { contractIdentity: identity, refs: [ref('call-1', 'shell', actualArgs, 'command_output', 9, stored.blobKey)], captureFailures: [], loadBlob: (k) => store.read(k) },
+        () => 'command_output'
+      );
+      expect(outcome.kind).toBe('no-evidence');
+    });
+  });
 });
 
 describe('findDuplicateSelectors', () => {

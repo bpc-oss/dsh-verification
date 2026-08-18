@@ -135,6 +135,19 @@
 
 > 这是"提高能力"的直接度量：没有 gate，一个 sloppy agent 会带 5 个缺陷完成直接上线；有 gate，全部被拦下并修正后才交付。
 
+## 五之六、真实模型 live 基准（v9.3 run 族兜底）
+
+在公认基准（HumanEval 官方数据集 + BigCodeBench）上用真实 deepseek-v4-flash live 筛查：
+
+| 基准 | 无插件对照 | 有插件 |
+|---|---|---|
+| HumanEval（63 题） | 62/63（98.4%） | 失败题 HumanEval/54（same_chars）：验证流程下 **7/7 官方测试全过** |
+| BigCodeBench（A 批 10 题） | 10/10 | - |
+
+**关键发现（驱动 v9.3）**：live 反复出现 run/test 类 AC 被误标——agent 冻结 shell selector 的参数哈希与实际 shell 命令不一致（如冻结 `python test_fib.py`、实际跑 `python -c "import fib; ..."`）→ exact 绑定失败，即便测试真实运行且通过。file 族已有兜底，run 族没有。
+
+**v9.3 修复**：`binders.ts` bindFamilyFallback 扩展到 run 族（command_output/test_run），命令对齐——证据的 payload.command 必须包含 AC 描述的特征 token（引号文本或非通用标识符，如 fib/55）；`service.ts` 第二程条件加入 run 族 AC。新增回归：2 binders（命令对齐绑定/拒绝无关命令）+ 1 E2E 复现 HE/54（gate done）+ 1 exact-only 不变。
+
 ## 六、还缺什么（开源前建议补齐）
 
 1. **with/without 对比**：同一任务开/关引擎，对比交付物真实存在性、测试通过率（直接量化增益）

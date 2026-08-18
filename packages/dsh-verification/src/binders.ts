@@ -13,6 +13,9 @@ import { CapturedEvidenceSchema, evidenceTypesCompatible, selectorKey, selectorR
 
 import type { CaptureFailureRecord, EvidenceRef } from './projection';
 
+/** file 证据族（与 dsh-evidence EVIDENCE_FAMILIES 一致）；族兜底支持判定用。 */
+const FILE_FAMILY_TYPES = ['file_diff', 'file_exists', 'quote_with_location'] as const;
+
 export interface BindingContext {
   contractIdentity: ContractIdentity;
   refs: EvidenceRef[];
@@ -163,14 +166,55 @@ function payloadPath(captured: CapturedEvidence): string {
   return typeof p === 'string' ? p.replace(/\\/g, '/') : '';
 }
 
+/** 证据 payload command（无则空串）。 */
+function payloadCommand(captured: CapturedEvidence): string {
+  const p = (captured.payload as { command?: unknown } | undefined)?.command;
+  return typeof p === 'string' ? p : '';
+}
+
+/** run/test 证据族（command_output / test_run）。 */
+const RUN_FAMILY_TYPES = ['command_output', 'test_run'] as const;
+
+function isRunFamilyType(t: string): boolean {
+  return (RUN_FAMILY_TYPES as readonly string[]).includes(t);
+}
+
+/** run 族命令提示提取时排除的通用词（太宽泛，不能作为对齐依据）。 */
+const RUN_STOPWORDS = new Set([
+  'python', 'shell', 'bash', 'pwsh', 'powershell', 'cmd', 'command', 'run', 'output', 'stdout', 'stderr',
+  '运行', '输出', '测试', '命令', '执行', '验证', '检查', '返回', '结果',
+  'test', 'tests', 'suite', 'all', 'pass', 'passes', 'exit', 'code', 'the', 'and', 'that', 'with', 'using', 'should', 'must'
+]);
+
 /**
- * file 族兜底：exact selector 无匹配时，选作用域内同族（evidenceTypesCompatible）真实证据中
+ * 从 AC 描述提取 run 族"命令特征 token"（兜底对齐用）。
+ * 优先级：引号内的精确文本 > 非通用标识符（如 fib / same_chars / deploy）。
+ */
+function commandHints(desc: string): string[] {
+  const out = new Set<string>();
+  for (const m of desc.matchAll(/"([^"]{2,})"/g)) out.add(m[1]!.toLowerCase());
+  for (const m of desc.matchAll(/'([^']{2,})'/g)) out.add(m[1]!.toLowerCase());
+  for (const m of desc.matchAll(/[A-Za-z_][A-Za-z0-9_]{2,}/g)) {
+    const w = m[0]!.toLowerCase();
+    if (!RUN_STOPWORDS.has(w)) out.add(w);
+  }
+  return [...out];
+}
+
+/**
+ * 族兜底（v9.3）：exact selector 无匹配时，选作用域内同族（evidenceTypesCompatible）真实证据中
  * 最高 committed seq 的一条（排除与 exact selector 同 tool+argsHash 的 ref，避免回绑失败证据）。
- * 路径对齐：AC 描述含交付物路径时，候选证据的 payload.path 必须包含该路径提示
- * （防止"写别的文件但内容符合"冒充交付物）。blob 缺失/损坏/类型不兼容 → 跳过该候选。
+ * 支持 file 族（file_diff/file_exists/quote_with_location，路径对齐）与 run 族
+ * （command_output/test_run，命令特征对齐——证据 command 须含 AC 描述的特征 token）。
+ * blob 缺失/损坏/类型不兼容 → 跳过该候选。
  */
 async function bindFamilyFallback(ac: AcceptanceCriterion, ctx: BindingContext, selector: SelectorV1): Promise<BoundOutcome | undefined> {
-  const hints = deliverableHints(ac.desc);
+  const isFile = FILE_FAMILY_TYPES.includes(selector.evidenceType as (typeof FILE_FAMILY_TYPES)[number]);
+  const isRun = isRunFamilyType(selector.evidenceType);
+  if (!isFile && !isRun) {
+    return undefined; // 仅 file / run 族支持兜底
+  }
+  const hints = isFile ? deliverableHints(ac.desc) : commandHints(ac.desc);
   const candidates = ctx.refs
     .filter(
       (ref) =>
@@ -190,9 +234,16 @@ async function bindFamilyFallback(ac: AcceptanceCriterion, ctx: BindingContext, 
       continue;
     }
     if (hints.length > 0) {
-      const p = payloadPath(captured);
-      if (p === '' || !hints.some((h) => p.includes(h))) {
-        continue; // 交付物路径未对齐 → 不接受（防无关文件冒充）
+      if (isFile) {
+        const p = payloadPath(captured);
+        if (p === '' || !hints.some((h) => p.includes(h))) {
+          continue; // 交付物路径未对齐 → 不接受（防无关文件冒充）
+        }
+      } else {
+        const c = payloadCommand(captured).toLowerCase();
+        if (c === '' || !hints.some((h) => c.includes(h))) {
+          continue; // 命令特征未对齐 → 不接受（防无关命令冒充）
+        }
       }
     }
     const bound: BoundEvidence = {

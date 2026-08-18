@@ -82,12 +82,23 @@ export interface ServiceDeps {
 /** file 证据族（与 dsh-evidence EVIDENCE_FAMILIES 一致）；用于判定某 AC 是否可做族内兜底。 */
 const FILE_FAMILY_TYPES = ['file_diff', 'file_exists', 'quote_with_location'] as const;
 
+/** run/test 证据族（command_output / test_run；v9.3：与 file 族同级的兜底支持）。 */
+const RUN_FAMILY_TYPES = ['command_output', 'test_run'] as const;
+
 function isFileFamilyAc(ac: import('@bpc-oss/dsh-evidence').AcceptanceCriterion): boolean {
   if (ac.oracleHint === 'file') {
     return true;
   }
   const t = ac.selector?.evidenceType;
   return t !== undefined && (FILE_FAMILY_TYPES as readonly string[]).includes(t);
+}
+
+function isRunFamilyAc(ac: import('@bpc-oss/dsh-evidence').AcceptanceCriterion): boolean {
+  if (ac.oracleHint === 'run' || ac.oracleHint === 'test') {
+    return true;
+  }
+  const t = ac.selector?.evidenceType;
+  return t !== undefined && (RUN_FAMILY_TYPES as readonly string[]).includes(t);
 }
 
 export class VerificationError extends Error {
@@ -877,7 +888,7 @@ export class VerificationService extends Service {
     if (this.config.binderFamilyFallback !== false) {
       for (const ac of contract.acceptanceCriteria) {
         const v0 = verdicts.get(ac.id);
-        if (!v0 || v0.result !== 'fail' || !isFileFamilyAc(ac)) {
+        if (!v0 || v0.result !== 'fail' || (!isFileFamilyAc(ac) && !isRunFamilyAc(ac))) {
           continue;
         }
         const fb = await bindSelectorForAc(

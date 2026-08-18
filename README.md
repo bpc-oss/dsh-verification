@@ -23,6 +23,7 @@ blocking.
 | `@bpc-oss/dsh-verification` | engine: task epochs, contracts, oracles, completion gate |
 | `@bpc-oss/dsh-evidence` | pure zod schemas: contracts, evidence, verdicts, selectors |
 | `@bpc-oss/dsh-client-ui-verification` | client: verification settings panel |
+| `@bpc-oss/dsh-eval-core` | read-only eval core: task cases, mock/live subjects, command-oracle seam, scorecard/report, candidate manifests |
 
 **Benchmarks** (reproducible): synthetic recall **100%** / false-positive **0%**
 (`pnpm --filter @bpc-oss/dsh-verification bench`); real-task replay audit and
@@ -109,6 +110,7 @@ Bobby 验证引擎移植到 DeepSeek Harness（DSH）的 Cordis 插件套件（*
 | `@bpc-oss/dsh-evidence` | 纯类型：CapturedEvidence/BoundEvidence 两态、SelectorV1（exact-only）、sourceBasis/ContractRef 五元组身份、规范化哈希 |
 | `@bpc-oss/dsh-verification` | host 插件：goal-bound task epoch、契约权威（独立捕获/人类确认）、内容寻址 blob、完成闸门 + CompletionPermit + strict replay、T0–T4 裁判、冻结规则 |
 | `@bpc-oss/dsh-client-ui-verification` | client 插件：契约卡片（含 frozen selector）/逐 AC 裁决/证据面板/设置节 |
+| `@bpc-oss/dsh-eval-core` | 只读 eval core：task-case、Mock/Dsh subject、CommandOracleExecutor seam、scorecard/report、候选 manifest（P1-3） |
 
 ## 安装
 

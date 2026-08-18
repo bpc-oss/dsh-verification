@@ -35,6 +35,14 @@ const GRADER_LIVE_README = graderContract({
   outOfScope: []
 });
 
+const GRADER_LIVE_RUN = graderContract({
+  goal: '实现 same_chars 并通过测试',
+  acceptanceCriteria: [{ id: 'AC1', desc: 'python 运行 fib(10) 输出 55', oracleHint: 'run' }],
+  constraints: [],
+  inputs: [],
+  outOfScope: []
+});
+
 let _envSeq = 0;
 function makeEnv(binderFamilyFallback: boolean, grader: string = GRADER) {
   const ctx = new Context();
@@ -160,6 +168,36 @@ describe('task completion capability (family fallback fixes false rejection of g
         isError: false,
         value: { path: 'C:\\Users\\Administrator\\.dsh\\tmp\\live-demo\\README.md', after: '# Live Demo\n\nlive-verification-ok' }
       },
+      40
+    );
+
+    const outcome = await env.svc.evaluateGate(env.agent);
+    expect(outcome.gate.status).toBe('done');
+    const verdicts = env.svc.getProjection(env.agent).verdicts;
+    expect(verdicts.AC1?.result).toBe('pass');
+    expect(verdicts.AC1?.detail ?? '').toContain('family evidence fallback');
+  });
+
+  it('LIVE reproduction (2026-08-18 HE/54): run-family selector mismatch → command-aligned family fallback → gate=done', async () => {
+    // 真实 live 会话：agent 冻结 shell selector（参数 A），实际 shell 运行（参数 B，命令含 fib）→
+    // exact 哈希不匹配 → v9.3 run 族兜底（命令对齐 fib）→ 应转 pass。
+    const env = makeEnv(true, GRADER_LIVE_RUN);
+    env.session.append('user/message', { id: 'u0', source: { kind: 'user' }, content: [{ type: 'text', text: '实现 same_chars 并通过测试' }] }, { surfaceOp: 'append' });
+    const view = env.goals.create(env.agent, { objective: '实现 same_chars 并通过测试' });
+    const proposal = {
+      goal_value: '实现 same_chars 并通过测试',
+      acceptance_criteria: [{ id: 'AC1', desc: 'python 运行 fib(10) 输出 55', oracleHint: 'run', tool: 'shell', args: { command: 'python test_fib.py' } }],
+      constraints: [],
+      inputs: [],
+      outOfScope: []
+    };
+    const result = await env.svc.setPlanFromProposal(env.agent, view.id, view.revision, proposal);
+    if (!result.ok) throw new Error(result.reason);
+
+    // 真实 shell 运行（与冻结 selector 参数不同，但命令含 fib）
+    await env.svc.captureEvidence(
+      env.agent,
+      { callId: 'r1', name: 'shell', arguments: { command: 'python -c "import fib; print(fib.fib(10))"' }, isError: false, value: { exitCode: 0, stdout: '55' } },
       40
     );
 
