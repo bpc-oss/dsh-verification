@@ -201,6 +201,15 @@
    - 即使走了流程（heterogeneous-dates 处理组 gate failed），**agent 自声明 AC 验证的是它自己误解的需求**——gate 无法捕获与官方要求的偏差（自声明 AC 的"垃圾进垃圾出"）。
 3. **插件价值边界（诚实）**：AC 由 agent 自声明时，引擎只能审计 agent 声称的目标。要捕获"交付物误解"需要：**enforce 模式 + 独立捕获/人类确认的契约**（AC 由外部权威定义），或直接把官方测试作为 AC。这正是 `intent.contractOrigin: independent-capture / human-confirmed` 存在的意义——advisory + 自声明是审计层，不是验收层。
 
+**边界可破的实证（heterogeneous-dates v2）**：同一任务，把官方要求**明确作为 AC**（"交付物必须是 avg_temp.txt，值为 11.428571"）重新跑：
+
+| 版本 | AC 来源 | 交付物 | 官方测试 |
+|---|---|---|---|
+| v1（批次） | agent 自声明（sf_daily_temp_change.csv） | 错误文件名 | **FAIL** |
+| v2 | **官方要求**（avg_temp.txt + 值） | avg_temp.txt = 11.428571 | **PASS** |
+
+> v2 的 gate 仍 failed：AC1（file 存在）无 avg_temp.txt 的**直接文件证据**（agent 写的是脚本 compute_avg_temp.py，文件由脚本运行产生，仅 shell 证据）——引擎保守正确地拒绝；AC2（值校验）经 shell 兜底 pass。结论：**验证引擎的强度上限 = 契约的权威性**；权威 AC（独立捕获/人类确认/官方测试）下它能引导正确交付，自声明 AC 下它只是审计层。
+
 ## 六、还缺什么（开源前建议补齐）
 
 1. **with/without 对比**：同一任务开/关引擎，对比交付物真实存在性、测试通过率（直接量化增益）
