@@ -167,6 +167,15 @@
 | aimo-airline-departures（数学） | **PASS**（results.txt=79） | **PASS**（交付物） | 处理组 gate=failed：agent 自声明 AC 质量差（run 族 selector 不匹配 + 怪 AC "期望文本 the"）→ 引擎严格审计暴露 |
 | csv-to-parquet（数据） | **PASS** | **PASS** | 双过 |
 | adaptive-rejection-sampler（算法实现） | **PASS**（正确实现 + 自写冒烟测试） | 会话异常无产出 | flash 自己写了测试迭代 |
+| grid-pattern-transform | **PASS** | **PASS** | 双过 |
+| pandas-etl | **PASS** | **PASS** | 双过 |
+| hello-world | **PASS** | **PASS** | 双过 |
+| heterogeneous-dates | **FAIL** | **FAIL** | 交付物误解（avg_temp.txt 未产出）；**v2 官方 AC 后 PASS**（见下） |
+| solve-maze-challenge | **FAIL** | **FAIL** | 未创建官方要求的 solution.js（处理组连 goal 都没建——advisory 可忽略流程） |
+| raman-fitting | **FAIL** | **FAIL** | 大量拟合工作产出 fit_results.json，官方要 results.json（文件名不符） |
+| broken-python | **FAIL** | **FAIL** | 任务概念（系统 python 损坏）不映射 Windows 环境，双无交付物 |
+
+**TB2 Windows 可跑子集汇总（10 任务）**：4 全过（aimo/csv/grid/pandas-etl/hello-world 5 过）、5 失败（heterogeneous-dates/solve-maze/raman/broken-python）+ ars 会话异常。失败模式：**交付物误解**（3 例：文件名/形式与官方要求不符）+ 环境不匹配（1 例）。**无插件与有插件结果一致——插件在 advisory + 自声明 AC 下未能拦截这些失败**（详见 §五之八边界分析）。
 
 **诚实结论**：deepseek-v4-flash 在这批 TB2 任务上**全过**（与 HumanEval 98%、BigCodeBench 10/10 一致）——没找到需要插件救援的失败点。插件在这些任务上的价值 = 审计层（处理组 gate 暴露 agent 自声明 AC 的质量问题，即"验收标准本身写错"这一真实风险）。
 
