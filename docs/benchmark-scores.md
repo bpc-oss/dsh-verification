@@ -4,12 +4,52 @@
 
 ## 一、模型能力分数（公认基准，无插件）
 
-| 基准 | 题目数 | 分数 | 判定方式 | 参考（同档模型） |
-|---|---|---|---|---|
-| **MMLU-Pro**（验证集） | 70 | **60.0%**（42/70） | 字母答案精确匹配 | flash 档 ~50-60% |
-| **HumanEval** | 63（筛查） | **98.4%**（62/63） | 官方隐藏测试 | flash 档 ~60-90% |
-| **BigCodeBench**（首批） | 10 | **100%**（10/10） | 官方 unittest | flash 档 ~30-40%（本模型超预期） |
-| **AIME**（aimo-validation） | 90 | 部分（1/5 批 14/18） | 整数精确匹配 | flash 档 ~10-20%（格式不合规致解析受限） |
+### 1.1 MMLU-Pro（官方排行榜对照，%）
+
+| 模型 | MMLU-Pro | 来源 |
+|---|---:|---|
+| Claude-3.5-Sonnet | 76.12 | 官方 README |
+| GPT-4o | 72.55 | 官方 README |
+| Gemini-1.5-Pro | 69.03 | 官方 README |
+| Claude-3-Opus | 68.45 | 官方 README |
+| GPT-4-Turbo | 63.71 | 官方 README |
+| **DeepSeek-V4-Flash（本机实测）** | **60.0%**（70 题验证集） | 本次实测 |
+| Gemini-1.5-Flash | 59.12 | 官方 README |
+| Claude-3-Sonnet | 56.80 | 官方 README |
+| Llama-3-70B-Instruct | 56.20 | 官方 README |
+| DeepSeek-V2-Chat | 54.81 | 官方 README |
+
+### 1.2 HumanEval（pass@1，公开引用对照，%）
+
+| 模型 | HumanEval | 来源 |
+|---|---:|---|
+| Claude-3.5-Sonnet | ~92.0 | Anthropic 报告 |
+| GPT-4o | ~90.2 | OpenAI 报告 |
+| DeepSeek-V3 | 88.4 | DeepSeek-V3 技术报告 |
+| **DeepSeek-V4-Flash（本机实测）** | **98.4%**（63 题筛查子集） | 本次实测 |
+| GPT-4 | 88.4 | OpenAI 报告 |
+
+### 1.3 BigCodeBench-Complete（pass@1，公开引用对照，%）
+
+| 模型 | BigCodeBench | 来源 |
+|---|---:|---|
+| GPT-4o | 46.4 | 论文 |
+| DeepSeek-V3 | 42.5 | DeepSeek-V3 技术报告 |
+| Gemini-1.5-Pro | 38.5 | 论文 |
+| GPT-4-Turbo | 38.6 | 论文 |
+| Claude-3-Opus | 36.8 | 论文 |
+| **DeepSeek-V4-Flash（本机实测）** | **100%**（10 题首批子集） | 本次实测 |
+
+### 1.4 AIME 2024（pass@1，公开引用对照，%）
+
+| 模型 | AIME | 来源 |
+|---|---:|---|
+| DeepSeek-R1 | 79.8 | R1 技术报告 |
+| o1 | 74.4 | OpenAI |
+| GPT-4o | ~15 | 公开评测 |
+| **DeepSeek-V4-Flash（本机实测）** | 部分（1/5 批 14/18；其余批格式不合规） | 本次实测 |
+
+> **诚实声明**：本机数字是小样本（MMLU-Pro 验证集 70 题 / HumanEval 63 题 / BigCodeBench 10 题 / AIME 90 题），官方数字是全量基准——对比是**方向性参照**，不是严格同样本横评。HumanEval/BigCodeBench 小样本可能偏高（HumanEval 已饱和/污染）。
 
 ## 二、有/无插件对比（Terminal Bench 2 官方任务，10 个 Windows 子集）
 
