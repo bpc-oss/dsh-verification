@@ -14,8 +14,10 @@
 | # | 基准 | 官方源 | 类型 | 现状（2026-08-18） |
 |---|---|---|---|---|
 | 1 | **Terminal Bench 2.x** | tbench（112 题数据集已 vendor 至 `bench/tasks/datasets/tb2/`） | 终端命令执行 | ✅ **Windows 子集 10 任务已跑**（5 过 5 败 + 1 异常；败因=交付物误解）|
-| 2 | **HLE**（Humanity's Last Exam） | huggingface.co/datasets/cais/hle | 知识+推理 | ⚠️ 数据可达；需批量模型 API（本环境 key 在 host 进程，无法直连）|
-| 3 | **Agents' Last Exam** | scale 发布 | 异构 agent 任务 | ⚠️ 同上（Q&A 类）|
+| 2 | **HLE**（Humanity's Last Exam） | huggingface.co/datasets/cais/hle | 知识+推理 | ⚠️ **数据集受限**（需 HF 认证）；已转跑公开同类基准 |
+| 3 | **Agents' Last Exam** | scale 发布 | 异构 agent 任务 | ⚠️ 数据集受限（同上）|
+| 3b | **MMLU-Pro**（替代 HLE 的公开知识基准） | TIGER-Lab/MMLU-Pro | 知识+推理 | ✅ **已跑 70 题验证集：60.0%**（42/70，真实分数）|
+| 3c | **AIME**（公开数学竞赛基准） | AI-MO/aimo-validation-aime | 数学竞赛 | ⚠️ 90 题已跑；仅 1 批格式合规（14/18），其余 4 批模型陷入暴力推理未按答案格式输出（解析不可靠）→ 诚实记录为"部分" |
 | 4 | **Toolathlon** | hkust-nlp/Toolathlon | 工具编排+可验证 | ❌ 需官方 harness（ICLR 2026）|
 | 5 | **DeepSWE** | Whamp/deep-swe-bench（pi harness） | 软件工程 | ❌ 需 pi harness + 真实 repo + 隐藏测试 |
 | 6 | **NL2Repo** | 论文仓库 | 自然语言→仓库 | ❌ 需 harness + Docker |
