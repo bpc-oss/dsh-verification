@@ -182,6 +182,25 @@
 
 **结论**：9 基准全量 = 数天级工程（每个基准官方 harness + 环境 + N 任务 × 有/无插件）。本仓库已具备：任务夹具（control-group / agent-tasks / HumanEval / BigCodeBench / TB2 子集）+ 协议 + live 运行模式。全量跑建议作为独立专项（需要 Docker 沙箱 harness 集成 + 模型 API 通道）。
 
+## 五之八、TB2 全量子集 live 批次（5 任务 × 有/无插件）
+
+在 Terminal Bench 2 官方任务集上批量跑（Windows 可跑子集，官方 `test_outputs.py` 判分）：
+
+| 官方任务 | 无插件 | 有插件 | 失败模式 |
+|---|---|---|---|
+| grid-pattern-transform | **PASS** | **PASS** | - |
+| pandas-etl | **PASS** | **PASS** | - |
+| heterogeneous-dates | **FAIL** | **FAIL** | 交付物误解：产出 daily_change.py/sf_daily_temp_change.csv，官方要求 avg_temp.txt 未产出 |
+| solve-maze-challenge | **FAIL** | **FAIL** | 未创建官方要求的 solution.js（只留种子文件） |
+| raman-fitting | **FAIL** | **FAIL** | 大量拟合工作产出 fit_results.json，官方要求 results.json（文件名不符） |
+
+**核心发现（公认任务暴露插件真实边界）**：
+1. **3/5 任务 flash 失败，失败模式完全一致 = 交付物误解**——模型产出"自己的解读"（文件名/形式与官方要求不符），而非不会做任务本身。
+2. **插件没能救援这些失败**：
+   - advisory 下 agent 可忽略验证流程（solve-maze 处理组连 goal 都没建）；
+   - 即使走了流程（heterogeneous-dates 处理组 gate failed），**agent 自声明 AC 验证的是它自己误解的需求**——gate 无法捕获与官方要求的偏差（自声明 AC 的"垃圾进垃圾出"）。
+3. **插件价值边界（诚实）**：AC 由 agent 自声明时，引擎只能审计 agent 声称的目标。要捕获"交付物误解"需要：**enforce 模式 + 独立捕获/人类确认的契约**（AC 由外部权威定义），或直接把官方测试作为 AC。这正是 `intent.contractOrigin: independent-capture / human-confirmed` 存在的意义——advisory + 自声明是审计层，不是验收层。
+
 ## 六、还缺什么（开源前建议补齐）
 
 1. **with/without 对比**：同一任务开/关引擎，对比交付物真实存在性、测试通过率（直接量化增益）
