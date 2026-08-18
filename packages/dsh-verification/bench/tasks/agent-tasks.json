@@ -1,0 +1,40 @@
+{
+  "_comment": "agent 任务夹具（对标 J-Space 报告使用的公认 agent benchmark 类型：Terminal Bench 的命令执行+验证、Toolathlon 的工具编排+结果可验证）。每个任务有 setup（种子文件）与 grader（客观判分）。live 运行器按此夹具创建会话、注入种子、跑模型、用 grader 判分——唯一实验变量 = 是否加载验证插件。",
+  "tasks": [
+    {
+      "id": "tb-fib10",
+      "style": "terminal-bench",
+      "goal": "In the workspace, create fib.py that prints the first 10 Fibonacci numbers (one per line, starting 0, 1), run it, and confirm the output.",
+      "ac": { "id": "AC1", "desc": "python fib.py 输出前 10 个斐波那契数（0,1,1,2,3,5,8,13,21,34）", "oracleHint": "run", "tool": "shell" },
+      "setup": [],
+      "grader": "python -c \"import subprocess; out=subprocess.run(['python','fib.py'],capture_output=True,text=True,cwd=<cwd>).stdout.split(); assert out==['0','1','1','2','3','5','8','13','21','34'], out\""
+    },
+    {
+      "id": "tb-count-errors",
+      "style": "terminal-bench",
+      "goal": "In the workspace, data.txt contains log lines. Count how many lines contain the word 'error' (case-insensitive) and write the number to count.txt.",
+      "ac": { "id": "AC1", "desc": "count.txt 内容等于 data.txt 中含 error 的行数", "oracleHint": "file", "tool": "write" },
+      "setup": [{ "file": "data.txt", "content": "info: started\nerror: disk full\ninfo: ok\nerror: timeout\nwarn: retry\nERROR: fatal\ninfo: done" }],
+      "grader": "python -c \"import pathlib; n=sum(1 for l in pathlib.Path(<cwd>,'data.txt').read_text().splitlines() if 'error' in l.lower()); got=pathlib.Path(<cwd>,'count.txt').read_text().strip(); assert got==str(n), (got,n)\""
+    },
+    {
+      "id": "ta-config-port",
+      "style": "toolathlon",
+      "goal": "In the workspace, config.json contains a 'port' value. Read it, and write exactly that number to port.txt (no other content).",
+      "ac": { "id": "AC1", "desc": "port.txt 内容等于 config.json 的 port 值", "oracleHint": "file", "tool": "write" },
+      "setup": [{ "file": "config.json", "content": "{ \"host\": \"localhost\", \"port\": 8080 }" }],
+      "grader": "python -c \"import json,pathlib; want=str(json.loads(pathlib.Path(<cwd>,'config.json').read_text())['port']); got=pathlib.Path(<cwd>,'port.txt').read_text().strip(); assert got==want, (got,want)\""
+    },
+    {
+      "id": "ta-merge-sorted",
+      "style": "toolathlon",
+      "goal": "In the workspace, a.txt and b.txt each contain one number per line. Merge them into output.txt with all numbers sorted ascending, one per line.",
+      "ac": { "id": "AC1", "desc": "output.txt 是 a.txt 与 b.txt 数字的升序合并", "oracleHint": "file", "tool": "write" },
+      "setup": [
+        { "file": "a.txt", "content": "5\n1\n9\n" },
+        { "file": "b.txt", "content": "3\n7\n2\n" }
+      ],
+      "grader": "python -c \"import pathlib; nums=sorted(int(x) for f in ('a.txt','b.txt') for x in pathlib.Path(<cwd>,f).read_text().split()); got=[int(x) for x in pathlib.Path(<cwd>,'output.txt').read_text().split()]; assert got==nums, (got,nums)\""
+    }
+  ]
+}

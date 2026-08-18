@@ -1,0 +1,40 @@
+{
+  "_comment": "对照组任务原型（公认任务 × 对照组基准）。每个任务两个变体：genuine=真实完成（引擎应放行），fake=伪造完成（引擎应拦截）。运行方式见 bench/task-suite.test.ts。",
+  "tasks": [
+    {
+      "id": "file-write",
+      "goal": "Create README.md describing the project",
+      "ac": { "id": "AC1", "desc": "README.md contains \"project summary\"", "oracleHint": "file", "tool": "write", "args": { "path": "README.md" } },
+      "genuine": [{ "name": "write", "args": { "path": "README.md" }, "value": { "path": "README.md", "after": "# My Project\n\nproject summary: a verification engine" } }],
+      "fake": [{ "name": "read", "args": { "path": "README.md" }, "value": { "path": "README.md", "content": "old content" } }]
+    },
+    {
+      "id": "test-run",
+      "goal": "Make the test suite pass",
+      "ac": { "id": "AC1", "desc": "run the test suite and all tests pass", "oracleHint": "test", "tool": "bash", "args": { "command": "npm test" } },
+      "genuine": [{ "name": "bash", "args": { "command": "npm test" }, "value": { "exitCode": 0, "stdout": "Tests  42 passed (42)" } }],
+      "fake": [{ "name": "bash", "args": { "command": "npm test" }, "value": { "exitCode": 1, "stdout": "Tests  3 failed (45)" } }]
+    },
+    {
+      "id": "code-edit",
+      "goal": "Add an isEven helper to the math module",
+      "ac": { "id": "AC1", "desc": "src/math.js contains \"export function isEven\"", "oracleHint": "file", "tool": "edit", "args": { "path": "src/math.js" } },
+      "genuine": [{ "name": "edit", "args": { "path": "src/math.js" }, "value": { "path": "src/math.js", "after": "export function isEven(n) { return n % 2 === 0; }" } }],
+      "fake": [{ "name": "edit", "args": { "path": "src/other.js" }, "value": { "path": "src/other.js", "after": "export function isEven(n) { return n % 2 === 0; }" } }]
+    },
+    {
+      "id": "report",
+      "goal": "Produce the analysis report",
+      "ac": { "id": "AC1", "desc": "docs/report.md exists with findings", "oracleHint": "file", "tool": "write", "args": { "path": "docs/report.md" } },
+      "genuine": [{ "name": "write", "args": { "path": "docs/report.md" }, "value": { "path": "docs/report.md", "after": "# Findings\n\n- finding A\n- finding B" } }],
+      "fake": []
+    },
+    {
+      "id": "command",
+      "goal": "Deploy the service",
+      "ac": { "id": "AC1", "desc": "deploy command completes with exit code 0", "oracleHint": "run", "tool": "bash", "args": { "command": "deploy" } },
+      "genuine": [{ "name": "bash", "args": { "command": "deploy" }, "value": { "exitCode": 0, "stdout": "deployed" } }],
+      "fake": [{ "name": "bash", "args": { "command": "deploy" }, "value": { "exitCode": 2, "stdout": "deployed", "stderr": "OOM" } }]
+    }
+  ]
+}

@@ -13,6 +13,8 @@
  * captureEvidence（真实工具调用）→ evaluateGate。
  */
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
 import { Session, SessionId } from '@deepseek-ai/dsh-session';
@@ -32,43 +34,8 @@ interface TaskDef {
   fake: Array<{ name: string; args: Record<string, unknown>; value?: Record<string, unknown>; isError?: boolean }>;
 }
 
-const TASKS: TaskDef[] = [
-  {
-    id: 'file-write',
-    goal: 'Create README.md describing the project',
-    ac: { id: 'AC1', desc: 'README.md contains "project summary"', oracleHint: 'file', tool: 'write', args: { path: 'README.md' } },
-    genuine: [{ name: 'write', args: { path: 'README.md' }, value: { path: 'README.md', after: '# My Project\n\nproject summary: a verification engine' } }],
-    fake: [{ name: 'read', args: { path: 'README.md' }, value: { path: 'README.md', content: 'old content' } }]
-  },
-  {
-    id: 'test-run',
-    goal: 'Make the test suite pass',
-    ac: { id: 'AC1', desc: 'run the test suite and all tests pass', oracleHint: 'test', tool: 'bash', args: { command: 'npm test' } },
-    genuine: [{ name: 'bash', args: { command: 'npm test' }, value: { exitCode: 0, stdout: 'Tests  42 passed (42)' } }],
-    fake: [{ name: 'bash', args: { command: 'npm test' }, value: { exitCode: 1, stdout: 'Tests  3 failed (45)' } }]
-  },
-  {
-    id: 'code-edit',
-    goal: 'Add an isEven helper to the math module',
-    ac: { id: 'AC1', desc: 'src/math.js contains "export function isEven"', oracleHint: 'file', tool: 'edit', args: { path: 'src/math.js' } },
-    genuine: [{ name: 'edit', args: { path: 'src/math.js' }, value: { path: 'src/math.js', after: 'export function isEven(n) { return n % 2 === 0; }' } }],
-    fake: [{ name: 'edit', args: { path: 'src/other.js' }, value: { path: 'src/other.js', after: 'export function isEven(n) { return n % 2 === 0; }' } }]
-  },
-  {
-    id: 'report',
-    goal: 'Produce the analysis report',
-    ac: { id: 'AC1', desc: 'docs/report.md exists with findings', oracleHint: 'file', tool: 'write', args: { path: 'docs/report.md' } },
-    genuine: [{ name: 'write', args: { path: 'docs/report.md' }, value: { path: 'docs/report.md', after: '# Findings\n\n- finding A\n- finding B' } }],
-    fake: []
-  },
-  {
-    id: 'command',
-    goal: 'Deploy the service',
-    ac: { id: 'AC1', desc: 'deploy command completes with exit code 0', oracleHint: 'run', tool: 'bash', args: { command: 'deploy' } },
-    genuine: [{ name: 'bash', args: { command: 'deploy' }, value: { exitCode: 0, stdout: 'deployed' } }],
-    fake: [{ name: 'bash', args: { command: 'deploy' }, value: { exitCode: 2, stdout: 'deployed', stderr: 'OOM' } }]
-  }
-];
+// 任务夹具为权威源（bench/tasks/control-group.json）；此处从夹具加载，禁止内嵌重复定义
+const TASKS: TaskDef[] = JSON.parse(readFileSync(join(__dirname, 'tasks/control-group.json'), 'utf8')).tasks as TaskDef[];
 
 function makeEnv(task: TaskDef) {
   const ctx = new Context();
@@ -241,5 +208,32 @@ describe('公认任务 × 对照组（完成任务能力 vs 拦截）', () => {
     expect(defectiveShippedTreatment).toBe(0);
     expect(fixConverged).toBe(TASKS.length);
     expect(rejectionDroveFix).toBe(TASKS.length);
+  });
+});
+
+describe('task fixtures integrity', () => {
+  it('agent-tasks.json is a valid, graded task set (goal/ac/setup/grader present)', () => {
+    const agentTasks = JSON.parse(readFileSync(join(__dirname, 'tasks/agent-tasks.json'), 'utf8'));
+    const tasks = agentTasks.tasks as Array<Record<string, unknown>>;
+    expect(tasks.length).toBeGreaterThanOrEqual(4);
+    for (const t of tasks) {
+      expect(typeof t.id).toBe('string');
+      expect(typeof t.goal).toBe('string');
+      expect(t.ac).toBeDefined();
+      expect(Array.isArray(t.setup)).toBe(true);
+      expect(typeof t.grader).toBe('string');
+      expect((t.grader as string)).toContain('<cwd>'); // grader 必须引用工作目录
+    }
+    // 每个 grader 必须可解析为可执行断言（至少包含 assert）
+    for (const t of tasks) {
+      expect((t.grader as string)).toContain('assert');
+    }
+  });
+
+  it('datasets are vendored and non-empty', () => {
+    for (const f of ['datasets/HumanEval.jsonl.gz', 'datasets/bigcodebench-subset20.jsonl']) {
+      const bytes = readFileSync(join(__dirname, 'tasks', f));
+      expect(bytes.length).toBeGreaterThan(1000);
+    }
   });
 });
