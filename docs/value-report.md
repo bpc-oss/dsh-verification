@@ -158,6 +158,30 @@
 
 交付物全程 7/7 官方测试通过——插件从"误标真实运行"到"正确放行"，完全由真实模型 live 基准驱动迭代。
 
+## 五之七、公认 agent benchmark live 试点（Terminal Bench 2 官方任务）
+
+对标 J-Space 报告的做法，用**官方任务集**（terminal-bench，112 题清单 + 官方隐藏测试已 vendor 至 `bench/tasks/datasets/tb2/`）做有/无插件 live 对照。协议：唯一变量 = 是否加载插件；判分 = 官方 `test_outputs.py` 逻辑；单次运行声明。
+
+| 官方任务 | 无插件（对照） | 有插件（处理） | 说明 |
+|---|---|---|---|
+| aimo-airline-departures（数学） | **PASS**（results.txt=79） | **PASS**（交付物） | 处理组 gate=failed：agent 自声明 AC 质量差（run 族 selector 不匹配 + 怪 AC "期望文本 the"）→ 引擎严格审计暴露 |
+| csv-to-parquet（数据） | **PASS** | **PASS** | 双过 |
+| adaptive-rejection-sampler（算法实现） | **PASS**（正确实现 + 自写冒烟测试） | 会话异常无产出 | flash 自己写了测试迭代 |
+
+**诚实结论**：deepseek-v4-flash 在这批 TB2 任务上**全过**（与 HumanEval 98%、BigCodeBench 10/10 一致）——没找到需要插件救援的失败点。插件在这些任务上的价值 = 审计层（处理组 gate 暴露 agent 自声明 AC 的质量问题，即"验收标准本身写错"这一真实风险）。
+
+**9 基准全量可行性矩阵**（诚实评估）：
+
+| 基准 | 全量可行性 | 需要 |
+|---|---|---|
+| Terminal Bench 2.x | 子集可跑（已跑 3） | Docker 沙箱（多数任务要 Linux/QEMU/内核/网络环境） |
+| HLE / Agents' Last Exam | 子集可跑 | 批量模型 API（本环境 key 在 host 进程，无法直连） |
+| Toolathlon | 需官方 harness | 工具调用评测框架 |
+| DeepSWE / NL2Repo / AutomationBench | 需官方 harness + Docker | 真实 repo + 隐藏测试 + 长时 agent 运行 |
+| CyberGym | 最重 | CTF 安全环境 |
+
+**结论**：9 基准全量 = 数天级工程（每个基准官方 harness + 环境 + N 任务 × 有/无插件）。本仓库已具备：任务夹具（control-group / agent-tasks / HumanEval / BigCodeBench / TB2 子集）+ 协议 + live 运行模式。全量跑建议作为独立专项（需要 Docker 沙箱 harness 集成 + 模型 API 通道）。
+
 ## 六、还缺什么（开源前建议补齐）
 
 1. **with/without 对比**：同一任务开/关引擎，对比交付物真实存在性、测试通过率（直接量化增益）
