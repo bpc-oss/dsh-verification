@@ -35,9 +35,12 @@ const GRADER_LIVE_README = graderContract({
   outOfScope: []
 });
 
-const GRADER_LIVE_RUN = graderContract({
+const GRADER_LIVE_HE54 = graderContract({
   goal: '实现 same_chars 并通过测试',
-  acceptanceCriteria: [{ id: 'AC1', desc: 'python 运行 fib(10) 输出 55', oracleHint: 'run' }],
+  acceptanceCriteria: [
+    { id: 'AC1', desc: 'same_chars.py 实现文件已创建且包含 same_chars 函数定义', oracleHint: 'file' },
+    { id: 'AC2', desc: 'python 真实运行 7 个官方测试断言，输出显示全部通过（exit code 0，无 AssertionError）', oracleHint: 'run' }
+  ],
   constraints: [],
   inputs: [],
   outOfScope: []
@@ -178,15 +181,19 @@ describe('task completion capability (family fallback fixes false rejection of g
     expect(verdicts.AC1?.detail ?? '').toContain('family evidence fallback');
   });
 
-  it('LIVE reproduction (2026-08-18 HE/54): run-family selector mismatch → command-aligned family fallback → gate=done', async () => {
-    // 真实 live 会话：agent 冻结 shell selector（参数 A），实际 shell 运行（参数 B，命令含 fib）→
-    // exact 哈希不匹配 → v9.3 run 族兜底（命令对齐 fib）→ 应转 pass。
-    const env = makeEnv(true, GRADER_LIVE_RUN);
+  it('LIVE reproduction (2026-08-18 HE/54): run-family selector mismatch → contract-level command alignment → gate=done', async () => {
+    // 真实 live 会话（v9.3 复测）：契约含 file AC（same_chars.py）+ run AC（描述"输出显示全部通过"，
+    // 无文件名特征）→ 实际 shell 运行 `python same_chars.py`（与冻结 selector 参数不同）→
+    // run 族兜底需用契约级提示（file AC 的 same_chars）对齐命令 → 应转 pass。
+    const env = makeEnv(true, GRADER_LIVE_HE54);
     env.session.append('user/message', { id: 'u0', source: { kind: 'user' }, content: [{ type: 'text', text: '实现 same_chars 并通过测试' }] }, { surfaceOp: 'append' });
     const view = env.goals.create(env.agent, { objective: '实现 same_chars 并通过测试' });
     const proposal = {
       goal_value: '实现 same_chars 并通过测试',
-      acceptance_criteria: [{ id: 'AC1', desc: 'python 运行 fib(10) 输出 55', oracleHint: 'run', tool: 'shell', args: { command: 'python test_fib.py' } }],
+      acceptance_criteria: [
+        { id: 'AC1', desc: 'same_chars.py 实现文件已创建且包含 same_chars 函数定义', oracleHint: 'file', tool: 'write', args: { path: 'same_chars.py' } },
+        { id: 'AC2', desc: 'python 真实运行 7 个官方测试断言，输出显示全部通过（exit code 0，无 AssertionError）', oracleHint: 'run', tool: 'shell', args: { command: 'python test_same_chars.py' } }
+      ],
       constraints: [],
       inputs: [],
       outOfScope: []
@@ -194,17 +201,24 @@ describe('task completion capability (family fallback fixes false rejection of g
     const result = await env.svc.setPlanFromProposal(env.agent, view.id, view.revision, proposal);
     if (!result.ok) throw new Error(result.reason);
 
-    // 真实 shell 运行（与冻结 selector 参数不同，但命令含 fib）
+    // 真实 write（file AC 证据，路径含 same_chars.py）
     await env.svc.captureEvidence(
       env.agent,
-      { callId: 'r1', name: 'shell', arguments: { command: 'python -c "import fib; print(fib.fib(10))"' }, isError: false, value: { exitCode: 0, stdout: '55' } },
+      { callId: 'w1', name: 'write', arguments: { file_path: 'C:\\work\\same_chars.py', content: 'def same_chars(s0, s1): return set(s0) == set(s1)' }, isError: false, value: { path: 'C:\\work\\same_chars.py', after: 'def same_chars(s0, s1): return set(s0) == set(s1)' } },
       40
+    );
+    // 真实 shell 运行（与冻结 selector 参数不同，命令含 same_chars）
+    await env.svc.captureEvidence(
+      env.agent,
+      { callId: 'r1', name: 'shell', arguments: { command: 'python same_chars.py; echo "EXIT_CODE=$LASTEXITCODE"' }, isError: false, value: { exitCode: 0, stdout: 'all 7 passed' } },
+      45
     );
 
     const outcome = await env.svc.evaluateGate(env.agent);
     expect(outcome.gate.status).toBe('done');
     const verdicts = env.svc.getProjection(env.agent).verdicts;
     expect(verdicts.AC1?.result).toBe('pass');
-    expect(verdicts.AC1?.detail ?? '').toContain('family evidence fallback');
+    expect(verdicts.AC2?.result).toBe('pass');
+    expect(verdicts.AC2?.detail ?? '').toContain('family evidence fallback');
   });
 });

@@ -38,6 +38,13 @@ export interface BindOptions {
    * 安全语义：仅当 exact 无匹配时启用；绑定结果带 familyFallback 标记，裁决 detail 注明，可审计。
    */
   familyFallback?: boolean;
+  /**
+   * 2026-08-18（v9.3 修）：run 族命令对齐的额外提示（来自整个契约的其他 AC 描述）。
+   * 原因：run AC 描述常只写"验证意图"（如"输出显示全部通过"），命令是实现细节，
+   * 单条描述提取的特征 token 可能不在命令里（如 AssertionError）；而文件类 AC 的描述
+   * 会提到交付物（same_chars.py），命令 python same_chars.py 含其文件名 → 契约级提示可对齐。
+   */
+  familyExtraHints?: string[];
 }
 
 function identityMatches(ref: { contractIdentity: ContractIdentity }, identity: ContractIdentity): boolean {
@@ -111,7 +118,7 @@ export async function bindSelectorForAc(
 
   if (topKind === undefined) {
     if (opts.familyFallback) {
-      const family = await bindFamilyFallback(ac, ctx, selector);
+      const family = await bindFamilyFallback(ac, ctx, selector, opts.familyExtraHints);
       if (family !== undefined) {
         return family;
       }
@@ -190,7 +197,7 @@ const RUN_STOPWORDS = new Set([
  * 从 AC 描述提取 run 族"命令特征 token"（兜底对齐用）。
  * 优先级：引号内的精确文本 > 非通用标识符（如 fib / same_chars / deploy）。
  */
-function commandHints(desc: string): string[] {
+export function commandHints(desc: string): string[] {
   const out = new Set<string>();
   for (const m of desc.matchAll(/"([^"]{2,})"/g)) out.add(m[1]!.toLowerCase());
   for (const m of desc.matchAll(/'([^']{2,})'/g)) out.add(m[1]!.toLowerCase());
@@ -205,16 +212,18 @@ function commandHints(desc: string): string[] {
  * 族兜底（v9.3）：exact selector 无匹配时，选作用域内同族（evidenceTypesCompatible）真实证据中
  * 最高 committed seq 的一条（排除与 exact selector 同 tool+argsHash 的 ref，避免回绑失败证据）。
  * 支持 file 族（file_diff/file_exists/quote_with_location，路径对齐）与 run 族
- * （command_output/test_run，命令特征对齐——证据 command 须含 AC 描述的特征 token）。
+ * （command_output/test_run，命令特征对齐——证据 command 须含 AC 描述 + 契约级 extraHints 的特征 token）。
  * blob 缺失/损坏/类型不兼容 → 跳过该候选。
  */
-async function bindFamilyFallback(ac: AcceptanceCriterion, ctx: BindingContext, selector: SelectorV1): Promise<BoundOutcome | undefined> {
+async function bindFamilyFallback(ac: AcceptanceCriterion, ctx: BindingContext, selector: SelectorV1, extraHints?: string[]): Promise<BoundOutcome | undefined> {
   const isFile = FILE_FAMILY_TYPES.includes(selector.evidenceType as (typeof FILE_FAMILY_TYPES)[number]);
   const isRun = isRunFamilyType(selector.evidenceType);
   if (!isFile && !isRun) {
     return undefined; // 仅 file / run 族支持兜底
   }
-  const hints = isFile ? deliverableHints(ac.desc) : commandHints(ac.desc);
+  const hints = isFile
+    ? deliverableHints(ac.desc)
+    : [...new Set([...commandHints(ac.desc), ...(extraHints ?? [])])];
   const candidates = ctx.refs
     .filter(
       (ref) =>

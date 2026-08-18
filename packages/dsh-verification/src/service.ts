@@ -8,7 +8,7 @@ import type { ToolRecord } from '@bpc-oss/dsh-evidence';
 import { identitiesEqual } from '@bpc-oss/dsh-evidence';
 import { z } from 'zod';
 
-import { bindSelectorForAc, findDuplicateSelectors, type BoundOutcome } from './binders';
+import { bindSelectorForAc, commandHints, findDuplicateSelectors, type BoundOutcome } from './binders';
 import { ConstraintsLibrary } from './constraint-library';
 import { mintContract, rebaseContract, type BasisRuntimeEntry, type PlanProposal } from './contract-authority';
 import { contractIdentityOf } from '@bpc-oss/dsh-evidence';
@@ -886,6 +886,10 @@ export class VerificationService extends Service {
     // 兜底：exact 裁决 fail 时，用 bindSelectorForAc(familyFallback) 重绑族内真实文件证据重判；
     // 重判 pass → 采用（detail 注明 family evidence fallback，可审计）；仍 fail → 保留原裁决。
     if (this.config.binderFamilyFallback !== false) {
+      // 契约级命令提示（run 族对齐用）：聚合所有 AC 描述的特征 token——
+      // run AC 描述常只写验证意图（如"输出显示全部通过"），命令是实现细节，
+      // 但同契约的 file AC 描述会提到交付物（same_chars.py）→ 命令 python same_chars.py 可对齐。
+      const contractRunHints = [...new Set(contract.acceptanceCriteria.flatMap((a) => commandHints(a.desc)))];
       for (const ac of contract.acceptanceCriteria) {
         const v0 = verdicts.get(ac.id);
         if (!v0 || v0.result !== 'fail' || (!isFileFamilyAc(ac) && !isRunFamilyAc(ac))) {
@@ -900,7 +904,7 @@ export class VerificationService extends Service {
             loadBlob: async (key) => this.store.read(key)
           },
           (ac2) => hintToEvidenceType(ac2.oracleHint),
-          { familyFallback: true }
+          { familyFallback: true, familyExtraHints: contractRunHints }
         );
         if (fb.kind === 'bound' && fb.familyFallback) {
           const v1 = await this.judgeAc(agent, contract, ac, fb.evidence, fb);
