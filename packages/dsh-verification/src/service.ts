@@ -406,6 +406,25 @@ export class VerificationService extends Service {
     return this.getPlanView(agent)?.frozenAt !== undefined;
   }
 
+  /**
+   * 2026-08-18 加固（live enforce 演示暴露）：agent 可在 update_goal edit 后重声明契约、
+   * 删除/弱化已冻结的验收标准（demo：删掉 output_file AC，让错交付物通过）。
+   * 返回同 rootGoalId 下**最新一条 frozenAt 的契约**（agent 已承诺执行过的基准）。
+   */
+  private latestFrozenContractForGoal(agent: Agent, rootGoalId: string): TaskContract | null {
+    let latest: TaskContract | null = null;
+    for (const event of agent.session.events) {
+      if (event.type !== 'verification/change') {
+        continue;
+      }
+      const record = (event.data as { record?: VerificationRecord }).record;
+      if (record?.kind === 'plan' && record.frozenAt && record.authorityScope?.rootGoalId === rootGoalId && record.contract) {
+        latest = record.contract;
+      }
+    }
+    return latest;
+  }
+
   // ── epoch / contract ────────────────────────────────────────
 
   requireGoalBoundEpoch(agent: Agent, goalId: string, goalRevision: number): FoldedEpoch {
@@ -463,6 +482,35 @@ export class VerificationService extends Service {
     } catch (error) {
       return { ok: false, reason: errorMessage(error) };
     }
+
+    // 2026-08-18 加固：enforce 下重声明不得削弱同 goal 已冻结契约（live 演示：agent 编辑 goal 后
+    // 删掉 output_file AC 让错误交付物通过）。新提案必须覆盖旧契约每条 AC（desc + oracleHint 一致，
+    // 且旧 AC 有 frozen selector 时新 AC 必须带 tool+args 提案）。增加 AC 允许；删除/弱化拒绝。
+    if (this.config.mode === 'enforce') {
+      const epoch = this.getActiveEpoch(agent);
+      if (epoch) {
+        const prior = this.latestFrozenContractForGoal(agent, epoch.rootGoalId);
+        if (prior && prior.acceptanceCriteria.length > 0) {
+          const newAcs = proposal.acceptance_criteria;
+          const missing: string[] = [];
+          for (const old of prior.acceptanceCriteria) {
+            const match = newAcs.find(
+              (ac) => ac.desc === old.desc && ac.oracleHint === old.oracleHint && (!old.selector || Boolean(ac.tool && ac.args))
+            );
+            if (!match) {
+              missing.push(`${old.desc.slice(0, 60)}${old.selector ? ` [witness: ${old.selector.toolIdentity}]` : ''}`);
+            }
+          }
+          if (missing.length > 0) {
+            return {
+              ok: false,
+              reason: `enforce: re-declared contract cannot weaken the committed (frozen) contract — missing or weakened acceptance criteria: ${missing.join(' | ')}. A goal edit cannot drop verification criteria; fix the deliverable instead (or route re-baseline through human confirmation).`
+            };
+          }
+        }
+      }
+    }
+
     let basis: BasisRuntimeEntry[];
     try {
       basis = this.collectSourceBasis(agent);

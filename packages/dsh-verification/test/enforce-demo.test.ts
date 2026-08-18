@@ -137,4 +137,41 @@ describe('enforce 模式：插件把"错交付物直接上线"变成"拦截 + �
     expect(thrown).toBeUndefined();
     expect(env.goals.get(env.agent)!.phase).toBe('complete');
   });
+
+  it('加固：enforce 下冻结契约后，弱化重声明（删 AC）被拒绝；超集重声明（加 AC）允许', async () => {
+    const env = makeEnforceEnv(GRADER_OFFICIAL);
+    const view = await bootstrap(env);
+
+    // 冻结契约（agent 已承诺执行：write 工具触发 freeze）
+    env.svc.freezePlan(env.agent, 'call-w1');
+
+    // 弱化重声明：删掉 AC1（avg_temp.txt 存在）——应被拒
+    const weaken = await env.svc.setPlanFromProposal(env.agent, view.id, view.revision, {
+      goal_value: '计算温度平均变化量并写入 avg_temp.txt',
+      acceptance_criteria: [
+        { id: 'AC2', desc: 'avg_temp.txt 内容为纯数字且值等于 11.428571（保留 3 位小数比对 11.429）', oracleHint: 'run', tool: 'shell', args: { command: 'python check_avg.py' } }
+      ],
+      constraints: [],
+      inputs: [],
+      outOfScope: []
+    });
+    expect(weaken.ok).toBe(false);
+    if (!weaken.ok) {
+      expect(weaken.reason).toContain('cannot weaken');
+    }
+
+    // 超集重声明：保留全部旧 AC + 新增一条 → 允许
+    const strengthen = await env.svc.setPlanFromProposal(env.agent, view.id, view.revision, {
+      goal_value: '计算温度平均变化量并写入 avg_temp.txt',
+      acceptance_criteria: [
+        { id: 'AC1', desc: '交付物文件 avg_temp.txt 必须存在于工作目录', oracleHint: 'file', tool: 'file_exists', args: { path: 'avg_temp.txt' } },
+        { id: 'AC2', desc: 'avg_temp.txt 内容为纯数字且值等于 11.428571（保留 3 位小数比对 11.429）', oracleHint: 'run', tool: 'shell', args: { command: 'python check_avg.py' } },
+        { id: 'AC3', desc: '额外约束：输入 CSV 必须被读取过', oracleHint: 'file', tool: 'read', args: { path: 'daily_temp_sf_high.csv' } }
+      ],
+      constraints: [],
+      inputs: [],
+      outOfScope: []
+    });
+    expect(strengthen.ok).toBe(true);
+  });
 });
