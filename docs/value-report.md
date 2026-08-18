@@ -148,6 +148,16 @@
 
 **v9.3 修复**：`binders.ts` bindFamilyFallback 扩展到 run 族（command_output/test_run），命令对齐——证据的 payload.command 必须包含 AC 描述的特征 token（引号文本或非通用标识符，如 fib/55）；`service.ts` 第二程条件加入 run 族 AC。新增回归：2 binders（命令对齐绑定/拒绝无关命令）+ 1 E2E 复现 HE/54（gate done）+ 1 exact-only 不变。
 
+**v9.3.1（契约级提示，live 实测驱动）**：新引擎 live 复测发现 run AC 描述常只写验证意图（"输出显示全部通过…AssertionError"）而命令是实现细节（`python same_chars.py`）——单描述提取的特征不在命令里 → 兜底仍拒收真实证据。修复：`evaluateGate` 聚合**整个契约所有 AC** 的命令特征（file AC 提到 `same_chars.py` → 命令可对齐）作为 `familyExtraHints`。live 三阶段对比（真实 deepseek-v4-flash 跑 HE/54 处理组）：
+
+| 引擎版本 | AC2 (run) 裁决 | gate |
+|---|---|---|
+| v9.2（无 run 兜底） | fail（no committed run） | failed |
+| v9.3（单描述提示） | fail（AssertionError 不在命令） | failed |
+| **v9.3.1（契约级提示）** | **pass**（family evidence fallback） | **done** |
+
+交付物全程 7/7 官方测试通过——插件从"误标真实运行"到"正确放行"，完全由真实模型 live 基准驱动迭代。
+
 ## 六、还缺什么（开源前建议补齐）
 
 1. **with/without 对比**：同一任务开/关引擎，对比交付物真实存在性、测试通过率（直接量化增益）
