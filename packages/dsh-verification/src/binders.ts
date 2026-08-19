@@ -209,6 +209,61 @@ export function commandHints(desc: string): string[] {
 }
 
 /**
+ * 族内候选证据（对齐过滤后，最高 seq 优先）——service 第二程逐条判分用。
+ * 2026-08-18 修复：family 兜底此前只取最高 seq 单条，若该条判不过（即使其他真实证据能满足 AC）
+ * 也会误拦正确交付。现在返回全部候选，service 判到任一 pass 即通过。
+ */
+export async function familyCandidates(ac: AcceptanceCriterion, ctx: BindingContext, selector: SelectorV1): Promise<Array<{ evidence: BoundEvidence; resultSeq: number }>> {
+  const isFile = FILE_FAMILY_TYPES.includes(selector.evidenceType as (typeof FILE_FAMILY_TYPES)[number]);
+  const isRun = isRunFamilyType(selector.evidenceType);
+  if (!isFile && !isRun) {
+    return [];
+  }
+  const hints = isFile ? deliverableHints(ac.desc) : commandHints(ac.desc);
+  const candidates = ctx.refs
+    .filter(
+      (ref) =>
+        identityMatches(ref, ctx.contractIdentity) &&
+        evidenceTypesCompatible(ref.evidenceType, selector.evidenceType) &&
+        !(ref.toolIdentity === selector.toolIdentity && ref.normalizedArgsHash === selector.normalizedArgsHash)
+    )
+    .sort((a, b) => b.resultSeq - a.resultSeq);
+
+  const out: Array<{ evidence: BoundEvidence; resultSeq: number }> = [];
+  for (const chosen of candidates) {
+    const bytes = await ctx.loadBlob(chosen.blobHash);
+    if (!bytes) {
+      continue;
+    }
+    const captured = await parseCaptured(bytes);
+    if (!captured || !evidenceTypesCompatible(captured.evidenceType, selector.evidenceType)) {
+      continue;
+    }
+    if (hints.length > 0) {
+      if (isFile) {
+        const p = payloadPath(captured);
+        if (p === '' || !hints.some((h) => p.includes(h))) {
+          continue; // 交付物路径未对齐 → 不接受（防无关文件冒充）
+        }
+      } else {
+        const c = payloadCommand(captured).toLowerCase();
+        if (c === '' || !hints.some((h) => c.includes(h))) {
+          continue; // 命令特征未对齐 → 不接受（防无关命令冒充）
+        }
+      }
+    }
+    const bound: BoundEvidence = {
+      ...captured,
+      callId: chosen.callId,
+      acId: ac.id,
+      selectorRef: selectorRefOf(ctx.contractIdentity, ac.id)
+    };
+    out.push({ evidence: bound, resultSeq: chosen.resultSeq });
+  }
+  return out;
+}
+
+/**
  * 族兜底（v9.3）：exact selector 无匹配时，选作用域内同族（evidenceTypesCompatible）真实证据中
  * 最高 committed seq 的一条（排除与 exact selector 同 tool+argsHash 的 ref，避免回绑失败证据）。
  * 支持 file 族（file_diff/file_exists/quote_with_location，路径对齐）与 run 族

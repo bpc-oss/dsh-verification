@@ -8,7 +8,7 @@ import type { ToolRecord } from '@bpc-oss/dsh-evidence';
 import { identitiesEqual } from '@bpc-oss/dsh-evidence';
 import { z } from 'zod';
 
-import { bindSelectorForAc, commandHints, findDuplicateSelectors, type BoundOutcome } from './binders';
+import { bindSelectorForAc, commandHints, familyCandidates, findDuplicateSelectors, type BoundOutcome } from './binders';
 import { ConstraintsLibrary } from './constraint-library';
 import { mintContract, rebaseContract, type BasisRuntimeEntry, type PlanProposal } from './contract-authority';
 import { contractIdentityOf } from '@bpc-oss/dsh-evidence';
@@ -933,6 +933,8 @@ export class VerificationService extends Service {
     // 而 write→file_diff 真实交付证据存在却不被 exact 绑定考虑 → 假阴性。
     // 兜底：exact 裁决 fail 时，用 bindSelectorForAc(familyFallback) 重绑族内真实文件证据重判；
     // 重判 pass → 采用（detail 注明 family evidence fallback，可审计）；仍 fail → 保留原裁决。
+    // 2026-08-18 加固（v9.4）：族兜底改为**逐条判分全部族内候选**——此前只取最高 seq 单条，
+    // 若该条证据判不过（即使其他真实证据能满足 AC）也会误拦正确交付（enforce 死循环根因之一）。
     if (this.config.binderFamilyFallback !== false) {
       // 契约级命令提示（run 族对齐用）：聚合所有 AC 描述的特征 token——
       // run AC 描述常只写验证意图（如"输出显示全部通过"），命令是实现细节，
@@ -943,22 +945,37 @@ export class VerificationService extends Service {
         if (!v0 || v0.result !== 'fail' || (!isFileFamilyAc(ac) && !isRunFamilyAc(ac))) {
           continue;
         }
-        const fb = await bindSelectorForAc(
-          ac,
-          {
-            contractIdentity: identity,
-            refs: scopedProjection.evidenceRefs,
-            captureFailures: scopedProjection.captureFailures,
-            loadBlob: async (key) => this.store.read(key)
-          },
-          (ac2) => hintToEvidenceType(ac2.oracleHint),
-          { familyFallback: true, familyExtraHints: contractRunHints }
-        );
+        const ctx2 = {
+          contractIdentity: identity,
+          refs: scopedProjection.evidenceRefs,
+          captureFailures: scopedProjection.captureFailures,
+          loadBlob: async (key: string) => this.store.read(key)
+        };
+        const fb = await bindSelectorForAc(ac, ctx2, (ac2) => hintToEvidenceType(ac2.oracleHint), {
+          familyFallback: true,
+          familyExtraHints: contractRunHints
+        });
         if (fb.kind === 'bound' && fb.familyFallback) {
           const v1 = await this.judgeAc(agent, contract, ac, fb.evidence, fb);
           if (v1.result === 'pass') {
             v1.detail = `${v1.detail ?? ''}（family evidence fallback: exact selector ${ac.selector?.toolIdentity ?? ''} 无有效证据，改用族内真实文件证据 ${fb.evidence.toolIdentity}→${fb.evidence.evidenceType} seq${fb.resultSeq}）`.trim();
             verdicts.set(ac.id, v1);
+            continue;
+          }
+        }
+        // v9.4：单条兜底仍 fail → 逐条判分全部族内候选，任一真实证据满足 AC 即通过
+        const candidates = await familyCandidates(ac, ctx2, ac.selector!);
+        for (const cand of candidates) {
+          const v2 = await this.judgeAc(agent, contract, ac, cand.evidence, {
+            kind: 'bound',
+            evidence: cand.evidence,
+            resultSeq: cand.resultSeq,
+            familyFallback: true
+          });
+          if (v2.result === 'pass') {
+            v2.detail = `${v2.detail ?? ''}（family evidence fallback: exact selector ${ac.selector?.toolIdentity ?? ''} 无有效证据，族内候选证据 ${cand.evidence.toolIdentity}→${cand.evidence.evidenceType} seq${cand.resultSeq} 满足验收）`.trim();
+            verdicts.set(ac.id, v2);
+            break;
           }
         }
       }
