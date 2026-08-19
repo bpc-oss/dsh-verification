@@ -112,9 +112,9 @@ describe('FileDiffOracle (v9.1 real-runtime shapes)', () => {
     expect(verdict.result).toBe('fail');
   });
 
-  it('canJudge is false when no file-family evidence is present', () => {
+  it('canJudge is true for command_output file-proxy evidence (v9.4: pwsh Set-Content/Test-Path)', () => {
     const oracle = new FileDiffOracle();
-    expect(oracle.canJudge(ac, [evidence('command_output', { exitCode: 0, stdout: 'DONE' })])).toBe(false);
+    expect(oracle.canJudge(ac, [evidence('command_output', { exitCode: 0, stdout: 'DONE' })])).toBe(true);
   });
 
   it('a failed run (error payload) with no substance fails', async () => {

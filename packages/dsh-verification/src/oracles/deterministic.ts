@@ -139,7 +139,22 @@ export class FileDiffOracle implements Oracle {
   readonly name = 'file-diff';
 
   canJudge(_ac: AcceptanceCriterion, evidence: Evidence[]): boolean {
-    return evidence.some((entry) => entry.evidenceType === 'file_diff' || entry.evidenceType === 'quote_with_location');
+    return evidence.some(
+      (entry) =>
+        entry.evidenceType === 'file_diff' ||
+        entry.evidenceType === 'quote_with_location' ||
+        entry.evidenceType === 'command_output' // v9.4：pwsh Set-Content/Test-Path 等文件操作产出 command_output
+    );
+  }
+
+  /** 从 AC 描述提取路径 token（v9.4：command_output 证据的路径对齐用）。 */
+  private pathHints(desc: string): string[] {
+    const out = new Set<string>();
+    for (const m of desc.matchAll(/[A-Za-z0-9_\-./\\]+\.(?:md|js|ts|json|py|txt|yml|yaml|toml|cfg|sh|ps1|css|html)\b|(?:[a-z0-9_\-]+)\.(?:txt|md|js|json|py)\b/gi)) {
+      const norm = m[0]!.replace(/\\/g, '/').toLowerCase();
+      if (norm.length >= 3) out.add(norm);
+    }
+    return [...out];
   }
 
   async judge(ac: AcceptanceCriterion, evidence: Evidence[]): Promise<VerdictBody> {
@@ -148,10 +163,34 @@ export class FileDiffOracle implements Oracle {
     );
     const expected = extractExactText(ac.desc);
     const contains = expected === undefined ? extractContainsText(ac.desc) : undefined;
-    const firstBadEvidence = fileEvidences.find((entry) => {
+
+    // v9.4：无 file 族证据时，接受 command_output 作为文件操作代理证据——
+    // 命令含交付物路径 hint + exitCode 0（文件活动成功）；content 类 AC 要求 stdout 含期望文本。
+    const fileEvidencesOrCmd: Evidence[] = fileEvidences.length > 0
+      ? fileEvidences
+      : evidence.filter((entry) => {
+          if (entry.evidenceType !== 'command_output') return false;
+          const payload = (entry.payload ?? {}) as { command?: string; exitCode?: number; stdout?: string };
+          if (typeof payload.command !== 'string' || payload.exitCode !== 0) return false;
+          const hints = this.pathHints(ac.desc);
+          if (hints.length === 0) return true; // 无路径 hint 时不要求命令对齐
+          const cmd = payload.command.toLowerCase();
+          if (!hints.some((h) => cmd.includes(h))) return false;
+          if (expected !== undefined) {
+            return typeof payload.stdout === 'string' && payload.stdout.includes(expected);
+          }
+          if (contains !== undefined) {
+            return typeof payload.stdout === 'string' && payload.stdout.includes(contains);
+          }
+          return true;
+        });
+
+    const firstBadEvidence = fileEvidencesOrCmd.find((entry) => {
       const payload = (entry.payload ?? {}) as FileDiffPayload;
 
       if (typeof payload.path !== 'string' || payload.path.trim().length === 0) {
+        // command_output 代理证据：路径在 command 文本里，不在 payload.path——放行交后续判
+        if (entry.evidenceType === 'command_output') return false;
         return true;
       }
 
@@ -173,10 +212,10 @@ export class FileDiffOracle implements Oracle {
       return false;
     });
 
-    const pass = fileEvidences.length > 0 && firstBadEvidence === undefined;
+    const pass = fileEvidencesOrCmd.length > 0 && firstBadEvidence === undefined;
 
     return {
-      claimId: fileEvidences[0]?.callId ?? ac.id,
+      claimId: fileEvidencesOrCmd[0]?.callId ?? ac.id,
       acId: ac.id,
       oracleTier: 'T0',
       result: pass ? 'pass' : 'fail',

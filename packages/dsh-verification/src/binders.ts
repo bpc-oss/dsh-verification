@@ -58,9 +58,11 @@ function identityMatches(ref: { contractIdentity: ContractIdentity }, identity: 
 }
 
 function refMatchesSelector(ref: EvidenceRef, selector: SelectorV1, identity: ContractIdentity): boolean {
+  // 2026-08-18（v9.4）：精确匹配只看 tool + argsHash，不看证据类型——
+  // selector 的 evidenceType 是声明时的猜测，真实证据类型由 deriveCaptured 权威决定
+  // （如 agent 声明 file_diff 的 pwsh AC，实际 pwsh 产出 command_output——同工具同参数，应绑定后交 oracle 判分）。
   return (
     identityMatches(ref, identity) &&
-    evidenceTypesCompatible(ref.evidenceType, selector.evidenceType) &&
     ref.toolIdentity === selector.toolIdentity &&
     ref.normalizedArgsHash === selector.normalizedArgsHash
   );
@@ -69,7 +71,6 @@ function refMatchesSelector(ref: EvidenceRef, selector: SelectorV1, identity: Co
 function failureMatchesSelector(failure: CaptureFailureRecord, selector: SelectorV1, identity: ContractIdentity): boolean {
   return (
     identityMatches(failure, identity) &&
-    evidenceTypesCompatible(failure.evidenceType, selector.evidenceType) &&
     failure.toolIdentity === selector.toolIdentity &&
     failure.normalizedArgsHash === selector.normalizedArgsHash
   );

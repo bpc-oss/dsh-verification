@@ -105,7 +105,7 @@ describe('bindSelectorForAc (v9.1 file-family compatibility)', () => {
     expect(outcome.kind).toBe('bound');
   });
 
-  it('still rejects CROSS-family type mismatches (test_run vs command_output selector)', async () => {
+  it('v9.4: exact match is type-agnostic (same tool+argsHash binds test_run to a command_output selector — the oracle judges)', async () => {
     const store = createMemoryBlobStore();
     const args = { command: 'npm test' };
     const blob = await makeBlob(store, 'bash', hash(args), 'test_run');
@@ -114,7 +114,8 @@ describe('bindSelectorForAc (v9.1 file-family compatibility)', () => {
       { contractIdentity: identity, refs: [ref('call-1', 'bash', args, 'test_run', 7, blob)], captureFailures: [], loadBlob: (k) => store.read(k) },
       () => 'command_output'
     );
-    expect(outcome.kind).toBe('no-evidence');
+    // selector 的 evidenceType 是声明猜测；同工具同参数的真实证据应绑定后交 oracle 判分
+    expect(outcome.kind).toBe('bound');
   });
 
   it('propagates a file-family capture failure at the highest seq (fail closed)', async () => {
