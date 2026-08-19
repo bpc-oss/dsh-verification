@@ -72,7 +72,7 @@ export function installCompleteGateHook(ctx: Context, service: VerificationServi
     // 写入类工具：契约要求 + 冻结先于副作用（拦截仅在 enforce 且 requireContractBeforeExecution 时生效）
     const contract = service.getContract(agent);
     if (!contract) {
-      if (config.mode === 'enforce' && requireContractBeforeExecution) {
+      if (service.modeOf(agent) === 'enforce' && requireContractBeforeExecution) {
         return { kind: 'deny', reason: 'missing_contract: 写入类工具（write/edit/shell 等）已调用，但未声明意图契约，无法验证副作用。请先 create_goal 后 set_verification_plan，或声明 tools/pre-execute 不要求契约（advisory）。' };
       }
       return next();
@@ -93,7 +93,7 @@ async function handleComplete(
   const agent = exec.agent as Parameters<VerificationService['getContract']>[0];
   const contract = service.getContract(agent);
   if (!contract) {
-    if (config.mode === 'enforce') {
+    if (service.modeOf(agent) === 'enforce') {
       return { kind: 'deny', reason: 'missing_contract: 未声明意图契约，无法验证完成。请先 set_verification_plan。' };
     }
     return next();
@@ -102,7 +102,7 @@ async function handleComplete(
     service.freezePlan(agent, String(exec.callId));
   }
 
-  if (config.mode === 'advisory') {
+  if (service.modeOf(agent) === 'advisory') {
     // v8：advisory 包住整个 evaluate——无论成败只执行一次 next()
     try {
       await service.evaluateGate(agent);

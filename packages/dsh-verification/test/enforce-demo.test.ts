@@ -187,4 +187,33 @@ describe('enforce 模式：插件把"错交付物直接上线"变成"拦截 + �
     expect(thrown).toBeUndefined();
     expect(env.goals.get(other)!.phase).toBe('complete');
   });
+
+  it('per-agent mode（2026-08-20 enforce preset）：agentPreset=enforce-standard 的会话按 enforce 处理（modeOf）', async () => {
+    const env = makeEnforceEnv(GRADER_OFFICIAL);
+    expect(env.svc.modeOf(env.agent)).toBe('enforce'); // 配置本身就是 enforce
+    // 配置为 advisory 的实例 + enforce-standard agent → 仍 enforce（preset 覆盖配置）
+    const advCtx = new Context();
+    const advSession = Session.create(SessionId(`sess-adv-${++_seq}`));
+    const advAgent = { id: `adv-agent-${_seq}`, session: advSession, agentPreset: 'enforce-standard' } as unknown as Agent;
+    advCtx.provide('agents', { get: (id: string) => (id === advAgent.id ? advAgent : undefined) } as never);
+    const advConfig: VerificationRuntimeConfig = {
+      mode: 'advisory',
+      maxCapturedEvidence: 200,
+      maxCapturedBytes: 20 * 1024 * 1024,
+      completionPermitTtlMs: 60_000,
+      configHash: 'cfg-adv',
+      enableDeterministic: true,
+      enableAssistantResponse: true,
+      enableCoverage: true,
+      enableProReview: false,
+      proReviewProvider: 'spawn',
+      globalConstraints: [],
+      intent: { consensusCount: 1, contractOrigin: 'independent-capture', maxEntries: 200 },
+      readOnlyToolAllowlist: [],
+      binderFamilyFallback: true
+    };
+    const advSvc = new VerificationService(advCtx, advConfig, { store: createMemoryBlobStore() });
+    expect(advSvc.modeOf(advAgent)).toBe('enforce'); // agentPreset 覆盖配置
+    expect(advSvc.modeOf({ id: 'plain-x', session: Session.create(SessionId('sess-px')) } as unknown as Agent)).toBe('advisory');
+  });
 });

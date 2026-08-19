@@ -373,6 +373,20 @@ export class VerificationService extends Service {
     return this.allEvents(agent).some((event) => event.type === 'verification/change');
   }
 
+  /**
+   * 2026-08-20（enforce preset）：per-agent 生效模式。
+   * 引擎保持全局（advisory），但 agentPreset === 'enforce-standard' 的会话按 enforce 处理——
+   * preset 不再挂载第二个引擎实例（loader 挂载机制 + 全局实例共存问题），
+   * 只靠 agentPreset 激活 enforce 语义（gate 拦截 + guard 强制）。
+   */
+  modeOf(agent: Agent): 'enforce' | 'advisory' {
+    const preset = (agent as { agentPreset?: string }).agentPreset;
+    if (preset === 'enforce-standard') {
+      return 'enforce';
+    }
+    return this.config.mode;
+  }
+
   private requireCurrentAuthorityScope(agent: Agent): AuthorityScope {
     const epoch = this.getActiveEpoch(agent);
     if (!epoch) {
@@ -495,7 +509,7 @@ export class VerificationService extends Service {
     // 2026-08-18 加固：enforce 下重声明不得削弱同 goal 已冻结契约（live 演示：agent 编辑 goal 后
     // 删掉 output_file AC 让错误交付物通过）。新提案必须覆盖旧契约每条 AC（desc + oracleHint 一致，
     // 且旧 AC 有 frozen selector 时新 AC 必须带 tool+args 提案）。增加 AC 允许；删除/弱化拒绝。
-    if (this.config.mode === 'enforce') {
+    if (this.modeOf(agent) === 'enforce') {
       const epoch = this.getActiveEpoch(agent);
       if (epoch) {
         const prior = this.latestFrozenContractForGoal(agent, epoch.rootGoalId);
@@ -559,7 +573,7 @@ export class VerificationService extends Service {
       // **有界重试**（幂等、无副作用）——这是对"严格权威"的正确补偿，不是静默降级：重试耗尽
       // 仍失败才 reject。
       let captured: Awaited<ReturnType<VerificationService['tryIndependentCapture']>> = null;
-      const captureAttempts = this.config.mode === 'enforce' ? 3 : 1;
+      const captureAttempts = this.modeOf(agent) === 'enforce' ? 3 : 1;
       for (let attempt = 0; attempt < captureAttempts && captured === null; attempt += 1) {
         captured = await this.tryIndependentCapture(
           agent,
@@ -587,7 +601,7 @@ export class VerificationService extends Service {
             return ac;
           })
         };
-      } else if (this.config.mode === 'enforce') {
+      } else if (this.modeOf(agent) === 'enforce') {
         return {
           ok: false,
           reason: `independent-capture unavailable after ${captureAttempts} attempt(s) (${this.captureUnavailableReason ?? 'grader returned no consensus'}); enforce mode requires an authoritative contract (independent-capture) or a human-confirmed one — fix intent.provider/model or route to human-confirmed`
@@ -599,7 +613,7 @@ export class VerificationService extends Service {
     } else if (this.config.intent.contractOrigin === 'human-confirmed') {
       if (this.config.askUser) {
         origin = 'human-confirmed';
-      } else if (this.config.mode === 'enforce') {
+      } else if (this.modeOf(agent) === 'enforce') {
         return {
           ok: false,
           reason:
@@ -775,7 +789,7 @@ export class VerificationService extends Service {
       entry: {
         at: this.clock(),
         status: 'failed',
-        mode: this.config.mode,
+        mode: this.modeOf(agent),
         reasons: [`evaluation_error: ${errorMessage(error)}`],
         authorityScope: this.requireCurrentAuthorityScope(agent)
       }
@@ -1015,7 +1029,7 @@ export class VerificationService extends Service {
     this.commit(agent, { kind: 'verdicts', verdicts: Object.fromEntries(verdicts), authorityScope: this.requireCurrentAuthorityScope(agent) });
     this.commit(agent, {
       kind: 'gate',
-      entry: { at: this.clock(), status: gate.status, mode: this.config.mode, reasons: gate.reasons, authorityScope: this.requireCurrentAuthorityScope(agent) }
+      entry: { at: this.clock(), status: gate.status, mode: this.modeOf(agent), reasons: gate.reasons, authorityScope: this.requireCurrentAuthorityScope(agent) }
     });
 
     return { gate, snapshotHash: this.currentSnapshotHash(agent), bindings };
