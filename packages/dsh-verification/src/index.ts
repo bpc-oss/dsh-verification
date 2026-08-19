@@ -280,10 +280,30 @@ export function apply(ctx: Context, config: Partial<VerificationConfig>): void {
   // S1-1 修复：GoalTransitionGuard seam（同步 pre-commit 强制）只在 enforce 安装。
   // advisory 本就"永不 deny"，安装 guard 会把它打成 GOAL_TRANSITION_DENIED（guard 拒绝时
   // complete 抛错无 permit 放行）。"不安装 guard → 上游默认放行"正是 seam 的向后兼容语义。
+  // 2026-08-19（enforce preset 审查）：guard 安装后必须在 fiber 生命周期结束时注销，
+  // 否则进程级全局数组 GOAL_TRANSITION_GUARDS 永久滞留（泄漏到其他 preset 会话）。
   if (resolved.mode === 'enforce') {
     const disposeGuard = installGoalTransitionGuard(ctx, service);
     if (!disposeGuard) {
       throw new Error('enforce verification blocked: GoalTransitionGuard seam unavailable');
+    }
+    const unregister = (): void => {
+      try {
+        disposeGuard();
+      } catch {
+        // 生命周期收尾不抛
+      }
+    };
+    // cordis Context 无类型化 dispose 事件——用 fiber effect（fn 立即执行、返回 cleanup 在 dispose 时跑）
+    const anyCtx = ctx as unknown as { effect?: (fn: () => unknown) => unknown; dispose?: () => void };
+    if (typeof anyCtx.effect === 'function') {
+      anyCtx.effect(() => unregister);
+    } else if (typeof anyCtx.dispose === 'function') {
+      const originalDispose = anyCtx.dispose;
+      anyCtx.dispose = function (this: unknown) {
+        unregister();
+        return (originalDispose as () => void).apply(this, arguments as never);
+      };
     }
   }
 

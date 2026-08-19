@@ -44,9 +44,16 @@ export function installGoalTransitionGuard(ctx: Context, service: VerificationSe
   }
   return goals.registerTransitionGuard((request) => {
     // 2026-08-19（enforce preset 审查）：GOAL_TRANSITION_GUARDS 是进程级全局数组——
-    // enforce 实例的 guard 会拦截所有会话的 complete。只对"参与过验证系统"的会话拦截：
-    // 其他 preset 的会话（从未调用验证工具/无 verification 事件）一律放行，杜绝泄漏到全局。
-    if (!service.hasVerificationActivity(request.agent)) {
+    // enforce 实例的 guard 会拦截所有会话的 complete。作用域规则：
+    // 1) agent 明确挂了其他 preset（agentPreset 存在且不是 enforce-standard）→ 放行；
+    // 2) 无 preset 标记且从未参与验证系统（无 verification 事件）→ 放行；
+    // 3) 其余（enforce preset 会话 / 有验证活动的会话）→ 按 permit 强制。
+    // 这保证 enforce 只拦自己 preset 的会话，advisory/其他 preset 会话的 complete 不受影响。
+    const preset = (request.agent as { agentPreset?: string }).agentPreset;
+    if (preset && preset !== 'enforce-standard') {
+      return { kind: 'allow', permitRef: undefined };
+    }
+    if (!preset && !service.hasVerificationActivity(request.agent)) {
       return { kind: 'allow', permitRef: undefined };
     }
     const result = service.assertCompletionPermit(request.agent, request.goalId, request.currentRevision);
