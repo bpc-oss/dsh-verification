@@ -221,13 +221,16 @@ export async function familyCandidates(ac: AcceptanceCriterion, ctx: BindingCont
     return [];
   }
   const hints = isFile ? deliverableHints(ac.desc) : commandHints(ac.desc);
+  // v9.4.1：file AC 也纳入 command_output 候选（FileDiffOracle 现可判 command_output——
+  // pwsh Set-Content/Test-Path 等文件操作产出 command_output，命令含交付物路径即可代理文件证据）。
   const candidates = ctx.refs
-    .filter(
-      (ref) =>
-        identityMatches(ref, ctx.contractIdentity) &&
-        evidenceTypesCompatible(ref.evidenceType, selector.evidenceType) &&
-        !(ref.toolIdentity === selector.toolIdentity && ref.normalizedArgsHash === selector.normalizedArgsHash)
-    )
+    .filter((ref) => {
+      if (!identityMatches(ref, ctx.contractIdentity)) return false;
+      if (ref.toolIdentity === selector.toolIdentity && ref.normalizedArgsHash === selector.normalizedArgsHash) return false;
+      if (evidenceTypesCompatible(ref.evidenceType, selector.evidenceType)) return true;
+      if (isFile && ref.evidenceType === 'command_output') return true; // file AC 的 command_output 代理候选
+      return false;
+    })
     .sort((a, b) => b.resultSeq - a.resultSeq);
 
   const out: Array<{ evidence: BoundEvidence; resultSeq: number }> = [];
@@ -237,14 +240,23 @@ export async function familyCandidates(ac: AcceptanceCriterion, ctx: BindingCont
       continue;
     }
     const captured = await parseCaptured(bytes);
-    if (!captured || !evidenceTypesCompatible(captured.evidenceType, selector.evidenceType)) {
+    if (!captured) {
+      continue;
+    }
+    const typeOk =
+      evidenceTypesCompatible(captured.evidenceType, selector.evidenceType) ||
+      (isFile && captured.evidenceType === 'command_output');
+    if (!typeOk) {
       continue;
     }
     if (hints.length > 0) {
       if (isFile) {
-        const p = payloadPath(captured);
-        if (p === '' || !hints.some((h) => p.includes(h))) {
-          continue; // 交付物路径未对齐 → 不接受（防无关文件冒充）
+        // file AC：file 族证据按 payload.path 对齐；command_output 代理证据按 command 文本对齐
+        const cmd = payloadCommand(captured).toLowerCase();
+        const pathOk = hints.some((h) => payloadPath(captured).includes(h));
+        const cmdOk = cmd !== '' && hints.some((h) => cmd.includes(h));
+        if (!pathOk && !cmdOk) {
+          continue; // 交付物路径/命令未对齐 → 不接受（防无关文件/命令冒充）
         }
       } else {
         const c = payloadCommand(captured).toLowerCase();
