@@ -133,6 +133,27 @@ CALL update_goal complete #4 → GATE failed
 2. **advisory vs enforce**：enforce **真实拦截**——连简单任务都被拒（hello-world 4×、csv 8×、hetero 19×），goal 保持 active。
 3. **enforce 的封锁问题（诚实）**：全部 enforce 会话**0 个收敛**（gate 全 fail）——**enforce + 自声明 AC + 脆弱 selector 绑定 = agent 死循环**：agent 声明的 AC selector 与它自己工具调用的证据不匹配 → gate 拒绝 → 加固后不能弱化 AC → 无法逃逸（hetero 卡 40+ 分钟）。**这是 enforce 真实可用性缺口，需修复（selector 绑定鲁棒性 + 更可操作的缺陷反馈），非宣传材料**。
 
+## 四之四、修复后：TB2.1 Docker 全量批跑（2026-08-18，v9.4.x + 官方 AC 指引）
+
+**修复链**（v9.4 `8085c34` / v9.4.1 `560c3c6` / v9.4.2 `9d9e3f9`）：family 兜底逐条判分全部族内候选 → 精确匹配 type-agnostic → file AC 纳入 command_output 代理证据。enforce 提示带**官方 AC 指引**（验收标准必须来自官方测试）。
+
+**结果**（Docker 容器内官方测试判分，~25 任务 × 3 条件，真实模型）：
+
+| 条件 | PASS | FAIL | 判分缺口（?）|
+|---|---|---|---|
+| **enforce** | **8** | 4 | 16 |
+| 无插件 | 4 | 8 | 13 |
+| advisory | 0 | 11 | 11 |
+
+**enforce 完胜任务（8 个：none/advisory FAIL → enforce PASS）**：
+`blind-maze-explorer-5x5`、`blind-maze-explorer-algorithm`（11 测试）、`broken-python`、`cobol-modernization`、`count-dataset-tokens`、`chess-best-move`、`aimo-airline-departures`、`attention-mil`
+
+**结论**：
+1. **修复 + 官方 AC 指引后，enforce 不再死循环**——fix-permissions 等任务 gate done + complete（此前 4-19× 误拦）。
+2. **enforce 交付正确率 > 无插件 > advisory**（8 > 4 > 0 PASS）——**验证流程 + 权威 AC 让 agent 真正产出正确交付**（官方测试为验收时，agent 被迫做到）。
+3. **advisory 最弱**：验证流程引导但不拦截（PASS=0——gate 记录了失败但 agent 照常完成，且官方 AC 指引只给了 enforce 条件，advisory 的自声明 AC 普遍不满足官方测试）。
+4. **机器限制（诚实）**：Docker daemon 因内存压力（89%）多次崩溃，全量 65 可建任务只跑完 ~25；剩余任务待机器稳定后补跑。判分缺口（?）多为容器缺依赖/daemon 崩溃时容器死亡，非模型失败。
+
 ## 五、关键结论
 
 1. **v4-flash 能力**：代码/知识强（HumanEval 98%、BigCodeBench 100%、MMLU-Pro 60%）；agent 行为弱（TB2 5/10 交付物误解；AIME 指令遵循不稳定）。
