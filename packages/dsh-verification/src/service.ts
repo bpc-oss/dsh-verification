@@ -964,18 +964,21 @@ export class VerificationService extends Service {
           }
         }
         // v9.4：单条兜底仍 fail → 逐条判分全部族内候选，任一真实证据满足 AC 即通过
-        const candidates = await familyCandidates(ac, ctx2, ac.selector!);
-        for (const cand of candidates) {
-          const v2 = await this.judgeAc(agent, contract, ac, cand.evidence, {
-            kind: 'bound',
-            evidence: cand.evidence,
-            resultSeq: cand.resultSeq,
-            familyFallback: true
-          });
-          if (v2.result === 'pass') {
-            v2.detail = `${v2.detail ?? ''}（family evidence fallback: exact selector ${ac.selector?.toolIdentity ?? ''} 无有效证据，族内候选证据 ${cand.evidence.toolIdentity}→${cand.evidence.evidenceType} seq${cand.resultSeq} 满足验收）`.trim();
-            verdicts.set(ac.id, v2);
-            break;
+        // （无 selector 的 AC 不适用族兜底——无证据类型锚点，保持 fail 不裸奔放行）
+        if (ac.selector) {
+          const candidates = await familyCandidates(ac, ctx2, ac.selector);
+          for (const cand of candidates) {
+            const v2 = await this.judgeAc(agent, contract, ac, cand.evidence, {
+              kind: 'bound',
+              evidence: cand.evidence,
+              resultSeq: cand.resultSeq,
+              familyFallback: true
+            });
+            if (v2.result === 'pass') {
+              v2.detail = `${v2.detail ?? ''}（family evidence fallback: exact selector ${ac.selector?.toolIdentity ?? ''} 无有效证据，族内候选证据 ${cand.evidence.toolIdentity}→${cand.evidence.evidenceType} seq${cand.resultSeq} 满足验收）`.trim();
+              verdicts.set(ac.id, v2);
+              break;
+            }
           }
         }
       }
