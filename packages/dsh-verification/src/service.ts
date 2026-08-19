@@ -364,6 +364,15 @@ export class VerificationService extends Service {
     return currentActiveEpoch(this.cache(agent).epochs);
   }
 
+  /**
+   * 2026-08-19（enforce preset 审查发现）：agent 是否参与过验证系统（会话里有 verification/change 事件）。
+   * goal transition guard 是进程级全局（GOAL_TRANSITION_GUARDS），enforce 实例的 guard 会拦截
+   * 所有会话的 complete；用此方法把"从未使用验证的会话"（其他 preset）放行，避免 enforce 泄漏到全局。
+   */
+  hasVerificationActivity(agent: Agent): boolean {
+    return this.allEvents(agent).some((event) => event.type === 'verification/change');
+  }
+
   private requireCurrentAuthorityScope(agent: Agent): AuthorityScope {
     const epoch = this.getActiveEpoch(agent);
     if (!epoch) {

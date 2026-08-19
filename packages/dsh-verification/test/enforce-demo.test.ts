@@ -24,11 +24,13 @@ import { graderContract, makeFakeLlm } from './fake-llm';
 
 let _seq = 0;
 
-function makeEnforceEnv(grader: string) {
+function makeEnforceEnv(grader: string, extraAgents: Agent[] = []) {
   const ctx = new Context();
   const session = Session.create(SessionId(`sess-enforce-${++_seq}`));
   const agent = { id: `enforce-agent-${_seq}`, session } as unknown as Agent;
-  ctx.provide('agents', { get: (id: string) => (id === agent.id ? agent : undefined) } as never);
+  const registry = new Map<string, Agent>([[agent.id, agent]]);
+  for (const extra of extraAgents) registry.set(extra.id, extra);
+  ctx.provide('agents', { get: (id: string) => registry.get(id) } as never);
   new GoalService(ctx, { defaultMaxGoalRounds: 16 });
   const goals = ctx.get('goals') as GoalService;
   const config: VerificationRuntimeConfig = {
@@ -83,9 +85,9 @@ async function bootstrap(env: ReturnType<typeof makeEnforceEnv>) {
   return view;
 }
 
-function completeOrThrow(env: ReturnType<typeof makeEnforceEnv>, id: string, revision: number): unknown {
+function completeOrThrow(env: ReturnType<typeof makeEnforceEnv>, id: string, revision: number, agent?: Agent): unknown {
   try {
-    env.goals.complete(env.agent, { id, revision });
+    env.goals.complete(agent ?? env.agent, { id, revision });
     return undefined;
   } catch (error) {
     return error;
@@ -173,5 +175,16 @@ describe('enforce 模式：插件把"错交付物直接上线"变成"拦截 + �
       outOfScope: []
     });
     expect(strengthen.ok).toBe(true);
+  });
+
+  it('防泄漏（2026-08-19 preset 审查）：从未参与验证系统的会话，其 complete 不被 enforce guard 拦截', async () => {
+    const other = { id: `plain-agent-${++_seq}`, session: Session.create(SessionId(`sess-plain-${_seq}`)) } as unknown as Agent;
+    const env = makeEnforceEnv(GRADER_OFFICIAL, [other]);
+    // 另一个 agent：完全没走验证流程（无 verification 事件，模拟其他 preset 的会话）
+    const view = env.goals.create(other, { objective: '随便一个任务' });
+    // 直接 complete（无契约、无验证活动）→ guard 必须放行（不泄漏到全局）
+    const thrown = completeOrThrow(env, view.id, view.revision, other);
+    expect(thrown).toBeUndefined();
+    expect(env.goals.get(other)!.phase).toBe('complete');
   });
 });
