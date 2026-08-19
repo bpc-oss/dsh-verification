@@ -1,9 +1,10 @@
 node_modules/
 dist/
-lib/
 !vendor/@deepseek-ai/dsh-goal/lib/
 *.log
 .DS_Store
 .tmp-profile-pkgs/
 .agent-os/
 .superpowers/
+# lib/ 构建产物已提交（clone 即用；与 dsh-web-billing 等发布型插件仓库一致）。
+# 重新构建后记得 git add packages/*/lib 更新产物。
