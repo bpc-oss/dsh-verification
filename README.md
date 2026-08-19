@@ -118,10 +118,12 @@ pnpm install && pnpm -r build && pnpm -r test
 
 挂到 DSH profile（示例 `presets/verification.cordis.yml`）：
 
-```bash
-pnpm add @bpc-oss/dsh-verification @bpc-oss/dsh-client-ui-verification
-# 把 presets/verification.cordis.yml 作为 patch 层引入
-```
+> ⚠️ `@bpc-oss/*` 未发布到 npm（npm 上 404），不能用包管理器直接安装。
+> 从 GitHub 仓库 bpc-oss/dsh-verification 获取源码即可：本仓库已提交构建产物
+> `packages/*/lib/`（index.js / index.d.ts / index.js.map），clone 后无需构建、直接可用。
+> 挂载方式：用 cordis.patch.yml 的 insert 以仓库内相对路径挂载
+> host 插件 `packages/dsh-verification/lib/index.js`、client 插件 `packages/dsh-client-ui-verification/lib/client.js`（headless 下 disabled），
+> 并把 `presets/verification.cordis.yml` 作为 patch 层引入。
 
 ## 工作方式（v9）
 
@@ -205,7 +207,7 @@ create_goal（goal-bound epoch）
 - **#5 上游会话 seq 竞态**：非本仓库因果，按帧修补记录；根治待 dsh 上游。
 - 全量自检：typecheck 0；测试 dsh-evidence 44 / dsh-verification 117 / dsh-client-ui-verification 11 = **172 全绿**；三处部署位（web/verify vendor + DSH 安装）已同步仓库构建。
 
-真机接入要点：profile 内只装 `@deepseek-ai/cordis` + `@deepseek-ai/schemastery`（+ 本插件 link），**不得**安装任何 `@deepseek-ai/dsh-*` 运行时依赖（符号分裂 → 工具调度 `reading 'prepare'` 崩溃）；插件经 `cordis.patch.yml` 的 `insert:` 以 profile 内相对路径 `./vendor-pkgs/@bpc-oss/dsh-verification/lib/index.js` 挂载（客户端插件指向 `lib/client.js`，headless 下 disabled；enforce 无人类通道时须在插件 `config.intent` 里 pin `provider`/`model` 使 grader 可用）。completion 事件 `permitRef` 归因依赖 GoalTransitionGuard seam 补丁副本，已应用到安装目录（原版备份于 `$DSH_HOME/backups/dsh-goal-install-20260815/`；GUI web 进程需重启后生效）。
+真机接入要点：profile 内只装 `@deepseek-ai/cordis` + `@deepseek-ai/schemastery`（+ 本插件 link），**不得**安装任何 `@deepseek-ai/dsh-*` 运行时依赖（符号分裂 → 工具调度 `reading 'prepare'` 崩溃）；插件经 `cordis.patch.yml` 的 `insert:` 以 profile 内相对路径 `<repo>/packages/dsh-verification/lib/index.js（构建产物已提交，clone 后直接可用；旧文档里的 ./vendor-pkgs 路径在本仓库不存在）` 挂载（客户端插件指向 `lib/client.js`，headless 下 disabled；enforce 无人类通道时须在插件 `config.intent` 里 pin `provider`/`model` 使 grader 可用）。completion 事件 `permitRef` 归因依赖 GoalTransitionGuard seam 补丁副本，已应用到安装目录（原版备份于 `$DSH_HOME/backups/dsh-goal-install-20260815/`；GUI web 进程需重启后生效）。
 
 ## 测试
 
