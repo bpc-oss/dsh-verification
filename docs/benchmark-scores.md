@@ -111,6 +111,28 @@ CALL update_goal complete #4 → GATE failed
 
 **结论**：enforce 把"声称完成"变成"必须真完成"——错交付物被硬拦截（live 4 次 BLOCK）；且 agent 不能靠改自己的 AC 逃逸（重声明被冻结契约锁住）。剩余设计边界：AC 的**首次权威性**取决于契约源（`contractOrigin: independent-capture / human-confirmed`——权威 AC 来自人类/官方测试，非 agent 自声明）。
 
+## 四之三、三条件对照（无插件 / advisory / enforce）× TB2 全集（2026-08-18）
+
+10 个官方 TB2 Windows 任务 × 3 条件，真实模型（deepseek-v4-flash）：
+
+| 任务 | 无插件 | advisory | enforce（gate 失败次数）|
+|---|---|---|---|
+| aimo-airline-departures | **FAIL**（空交付）| **PASS** | 6×（未收敛）|
+| adaptive-rejection-sampler | **FAIL**（写了 R 非 Python）| FAIL | 4× |
+| broken-python | PASS | PASS | 0（plan 阶段）|
+| csv-to-parquet | PASS | PASS | 8× |
+| grid-pattern-transform | **FAIL** | **PASS** | 12× |
+| hello-world | PASS | PASS | 4× |
+| heterogeneous-dates | PASS | PASS | **19×**（未收敛）|
+| pandas-etl | PASS | PASS | 0 |
+| raman-fitting | FAIL | FAIL | 5× |
+| solve-maze-challenge | PASS | PASS | 0 |
+
+**三条件差异（核心发现）**：
+1. **无插件 vs advisory**：advisory 的验证流程**引导模型做得更好**（aimo/grid：FAIL → PASS——模型被要求声明 AC + 真实执行后自我校正）；但 gate **从不拦截**，完成总是放行。
+2. **advisory vs enforce**：enforce **真实拦截**——连简单任务都被拒（hello-world 4×、csv 8×、hetero 19×），goal 保持 active。
+3. **enforce 的封锁问题（诚实）**：全部 enforce 会话**0 个收敛**（gate 全 fail）——**enforce + 自声明 AC + 脆弱 selector 绑定 = agent 死循环**：agent 声明的 AC selector 与它自己工具调用的证据不匹配 → gate 拒绝 → 加固后不能弱化 AC → 无法逃逸（hetero 卡 40+ 分钟）。**这是 enforce 真实可用性缺口，需修复（selector 绑定鲁棒性 + 更可操作的缺陷反馈），非宣传材料**。
+
 ## 五、关键结论
 
 1. **v4-flash 能力**：代码/知识强（HumanEval 98%、BigCodeBench 100%、MMLU-Pro 60%）；agent 行为弱（TB2 5/10 交付物误解；AIME 指令遵循不稳定）。
