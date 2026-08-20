@@ -194,7 +194,7 @@ describe('enforce 模式：插件把"错交付物直接上线"变成"拦截 + �
     // 配置为 advisory 的实例 + enforce-standard agent → 仍 enforce（preset 覆盖配置）
     const advCtx = new Context();
     const advSession = Session.create(SessionId(`sess-adv-${++_seq}`));
-    const advAgent = { id: `adv-agent-${_seq}`, session: advSession, agentPreset: 'enforce-standard' } as unknown as Agent;
+    const advAgent = { id: `adv-agent-${_seq}`, session: advSession, meta: { agentPreset: 'enforce-standard' } } as unknown as Agent;
     advCtx.provide('agents', { get: (id: string) => (id === advAgent.id ? advAgent : undefined) } as never);
     const advConfig: VerificationRuntimeConfig = {
       mode: 'advisory',
