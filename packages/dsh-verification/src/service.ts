@@ -378,9 +378,15 @@ export class VerificationService extends Service {
    * 引擎保持全局（advisory），但 agentPreset === 'enforce-standard' 的会话按 enforce 处理——
    * preset 不再挂载第二个引擎实例（loader 挂载机制 + 全局实例共存问题），
    * 只靠 agentPreset 激活 enforce 语义（gate 拦截 + guard 强制）。
-   * agentPreset 位于 Agent.meta（会话创建元数据），非顶层字段。
+   * agentPreset 位于 session.header.agentPreset（会话创建头，resolveSessionPreset 读取），
+   * 非 agent 顶层/meta 字段（2026-08-20 两次修正后确定）。
    */
   modeOf(agent: Agent): 'enforce' | 'advisory' {
+    const session = (agent as { session?: { header?: { agentPreset?: string } } }).session;
+    const headerPreset = session?.header?.agentPreset;
+    if (headerPreset === 'enforce-standard') {
+      return 'enforce';
+    }
     const meta = (agent as { meta?: { agentPreset?: string } }).meta;
     if (meta?.agentPreset === 'enforce-standard') {
       return 'enforce';

@@ -49,9 +49,11 @@ export function installGoalTransitionGuard(ctx: Context, service: VerificationSe
     // 2) 无 preset 标记且从未参与验证系统（无 verification 事件）→ 放行；
     // 3) 其余（enforce preset 会话 / 有验证活动的会话）→ 按 permit 强制。
     // 这保证 enforce 只拦自己 preset 的会话，advisory/其他 preset 会话的 complete 不受影响。
-    // agentPreset 位于 Agent.meta（会话创建元数据），非顶层字段（2026-08-20 修正）。
+    // agentPreset 位于 session.header.agentPreset（2026-08-20 三次修正后确定），meta 兜底。
+    const session = (request.agent as { session?: { header?: { agentPreset?: string } } }).session;
+    const headerPreset = session?.header?.agentPreset;
     const meta = (request.agent as { meta?: { agentPreset?: string } }).meta;
-    const preset = meta?.agentPreset;
+    const preset = headerPreset ?? meta?.agentPreset;
     if (preset && preset !== 'enforce-standard') {
       return { kind: 'allow', permitRef: undefined };
     }
