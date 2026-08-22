@@ -1,0 +1,8 @@
+﻿name: Enforce + RSI Standard
+description: >-
+  enforce-standard + RSI 能力引导（全局工具发现/技能复用/后台研究/知识沉淀）。
+  验证工作流（create_goal -> set_verification_plan -> 执行 -> gate 拦截错误交付物）
+  + 递归自我改进闭环（dev_tool_search 解锁工具、skill_search/load 复用技能、
+  research_orchestrator 后台研究、knowledge_ingest 沉淀技能）。
+  依赖 profile 层挂载 dsh-global-tool-discovery 插件。
+order: 11

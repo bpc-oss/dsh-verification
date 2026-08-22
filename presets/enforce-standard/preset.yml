@@ -1,0 +1,6 @@
+name: Enforce Standard
+description: >-
+  anchored-standard 性能机制 + bpc-verification 引擎 enforce 模式（绝对路径 scoped 本 preset）。
+  验收/评测场景启用：每个完成必须有真实证据支撑，错交付物被 gate 拦截 + 缺陷清单。
+  全局（其他 preset）保持 advisory 不受影响（guard 按 agentPreset 作用域，v9.4.3）。
+order: 10
