@@ -1175,6 +1175,21 @@ declare class VerificationService extends Service {
     private allEvents;
     getProjection(agent: Agent): VerificationProjection;
     getActiveEpoch(agent: Agent): FoldedEpoch | undefined;
+    /**
+     * 2026-08-19（enforce preset 审查发现）：agent 是否参与过验证系统（会话里有 verification/change 事件）。
+     * goal transition guard 是进程级全局（GOAL_TRANSITION_GUARDS），enforce 实例的 guard 会拦截
+     * 所有会话的 complete；用此方法把"从未使用验证的会话"（其他 preset）放行，避免 enforce 泄漏到全局。
+     */
+    hasVerificationActivity(agent: Agent): boolean;
+    /**
+     * 2026-08-20（enforce preset）：per-agent 生效模式。
+     * 引擎保持全局（advisory），但 agentPreset === 'enforce-standard' 的会话按 enforce 处理——
+     * preset 不再挂载第二个引擎实例（loader 挂载机制 + 全局实例共存问题），
+     * 只靠 agentPreset 激活 enforce 语义（gate 拦截 + guard 强制）。
+     * agentPreset 位于 session.header.agentPreset（会话创建头，resolveSessionPreset 读取），
+     * 非 agent 顶层/meta 字段（2026-08-20 两次修正后确定）。
+     */
+    modeOf(agent: Agent): 'enforce' | 'advisory';
     private requireCurrentAuthorityScope;
     getPlanView(agent: Agent): VerificationPlanView | null;
     /** 公开 blob 读取（pro_review / 工具用）。 */
@@ -1470,6 +1485,8 @@ declare class FileDiffOracle implements Oracle {
     readonly tier: "T0";
     readonly name = "file-diff";
     canJudge(_ac: AcceptanceCriterion, evidence: Evidence[]): boolean;
+    /** 从 AC 描述提取路径 token（v9.4：command_output 证据的路径对齐用）。 */
+    private pathHints;
     judge(ac: AcceptanceCriterion, evidence: Evidence[]): Promise<VerdictBody>;
     private detail;
 }

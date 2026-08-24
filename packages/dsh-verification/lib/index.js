@@ -34,7 +34,7 @@ function installCompleteGateHook(ctx, service, config) {
     }
     const contract = service.getContract(agent);
     if (!contract) {
-      if (config.mode === "enforce" && requireContractBeforeExecution) {
+      if (service.modeOf(agent) === "enforce" && requireContractBeforeExecution) {
         return { kind: "deny", reason: "missing_contract: \u5199\u5165\u7C7B\u5DE5\u5177\uFF08write/edit/shell \u7B49\uFF09\u5DF2\u8C03\u7528\uFF0C\u4F46\u672A\u58F0\u660E\u610F\u56FE\u5951\u7EA6\uFF0C\u65E0\u6CD5\u9A8C\u8BC1\u526F\u4F5C\u7528\u3002\u8BF7\u5148 create_goal \u540E set_verification_plan\uFF0C\u6216\u58F0\u660E tools/pre-execute \u4E0D\u8981\u6C42\u5951\u7EA6\uFF08advisory\uFF09\u3002" };
       }
       return next();
@@ -49,7 +49,7 @@ async function handleComplete(service, config, exec, next) {
   const agent = exec.agent;
   const contract = service.getContract(agent);
   if (!contract) {
-    if (config.mode === "enforce") {
+    if (service.modeOf(agent) === "enforce") {
       return { kind: "deny", reason: "missing_contract: \u672A\u58F0\u660E\u610F\u56FE\u5951\u7EA6\uFF0C\u65E0\u6CD5\u9A8C\u8BC1\u5B8C\u6210\u3002\u8BF7\u5148 set_verification_plan\u3002" };
     }
     return next();
@@ -57,7 +57,7 @@ async function handleComplete(service, config, exec, next) {
   if (!service.isFrozen(agent)) {
     service.freezePlan(agent, String(exec.callId));
   }
-  if (config.mode === "advisory") {
+  if (service.modeOf(agent) === "advisory") {
     try {
       await service.evaluateGate(agent);
     } catch (error) {
@@ -117,6 +117,16 @@ function installGoalTransitionGuard(ctx, service) {
     return void 0;
   }
   return goals.registerTransitionGuard((request) => {
+    const session = request.agent.session;
+    const headerPreset = session?.header?.agentPreset;
+    const meta = request.agent.meta;
+    const preset = headerPreset ?? meta?.agentPreset;
+    if (preset && preset !== "enforce-standard") {
+      return { kind: "allow", permitRef: void 0 };
+    }
+    if (!preset && !service.hasVerificationActivity(request.agent)) {
+      return { kind: "allow", permitRef: void 0 };
+    }
     const result = service.assertCompletionPermit(request.agent, request.goalId, request.currentRevision);
     if (result.ok) {
       return { kind: "allow", permitRef: result.usedPermitRef };
@@ -326,10 +336,10 @@ function identityMatches(ref, identity) {
   return ref.contractIdentity.contractId === identity.contractId && ref.contractIdentity.revision === identity.revision && ref.contractIdentity.contractContentHash === identity.contractContentHash && ref.contractIdentity.basisHash === identity.basisHash && ref.contractIdentity.sessionId === identity.sessionId;
 }
 function refMatchesSelector(ref, selector, identity) {
-  return identityMatches(ref, identity) && evidenceTypesCompatible(ref.evidenceType, selector.evidenceType) && ref.toolIdentity === selector.toolIdentity && ref.normalizedArgsHash === selector.normalizedArgsHash;
+  return identityMatches(ref, identity) && ref.toolIdentity === selector.toolIdentity && ref.normalizedArgsHash === selector.normalizedArgsHash;
 }
 function failureMatchesSelector(failure, selector, identity) {
-  return identityMatches(failure, identity) && evidenceTypesCompatible(failure.evidenceType, selector.evidenceType) && failure.toolIdentity === selector.toolIdentity && failure.normalizedArgsHash === selector.normalizedArgsHash;
+  return identityMatches(failure, identity) && failure.toolIdentity === selector.toolIdentity && failure.normalizedArgsHash === selector.normalizedArgsHash;
 }
 async function parseCaptured(bytes) {
   try {
@@ -461,6 +471,59 @@ function commandHints(desc) {
     if (!RUN_STOPWORDS.has(w)) out.add(w);
   }
   return [...out];
+}
+async function familyCandidates(ac, ctx, selector) {
+  const isFile = FILE_FAMILY_TYPES.includes(selector.evidenceType);
+  const isRun = isRunFamilyType(selector.evidenceType);
+  if (!isFile && !isRun) {
+    return [];
+  }
+  const hints = isFile ? deliverableHints(ac.desc) : commandHints(ac.desc);
+  const candidates = ctx.refs.filter((ref) => {
+    if (!identityMatches(ref, ctx.contractIdentity)) return false;
+    if (ref.toolIdentity === selector.toolIdentity && ref.normalizedArgsHash === selector.normalizedArgsHash) return false;
+    if (evidenceTypesCompatible(ref.evidenceType, selector.evidenceType)) return true;
+    if (isFile && ref.evidenceType === "command_output") return true;
+    return false;
+  }).sort((a, b) => b.resultSeq - a.resultSeq);
+  const out = [];
+  for (const chosen of candidates) {
+    const bytes = await ctx.loadBlob(chosen.blobHash);
+    if (!bytes) {
+      continue;
+    }
+    const captured = await parseCaptured(bytes);
+    if (!captured) {
+      continue;
+    }
+    const typeOk = evidenceTypesCompatible(captured.evidenceType, selector.evidenceType) || isFile && captured.evidenceType === "command_output";
+    if (!typeOk) {
+      continue;
+    }
+    if (hints.length > 0) {
+      if (isFile) {
+        const cmd = payloadCommand(captured).toLowerCase();
+        const pathOk = hints.some((h) => payloadPath(captured).includes(h));
+        const cmdOk = cmd !== "" && hints.some((h) => cmd.includes(h));
+        if (!pathOk && !cmdOk) {
+          continue;
+        }
+      } else {
+        const c = payloadCommand(captured).toLowerCase();
+        if (c === "" || !hints.some((h) => c.includes(h))) {
+          continue;
+        }
+      }
+    }
+    const bound = {
+      ...captured,
+      callId: chosen.callId,
+      acId: ac.id,
+      selectorRef: selectorRefOf(ctx.contractIdentity, ac.id)
+    };
+    out.push({ evidence: bound, resultSeq: chosen.resultSeq });
+  }
+  return out;
 }
 async function bindFamilyFallback(ac, ctx, selector, extraHints) {
   const isFile = FILE_FAMILY_TYPES.includes(selector.evidenceType);
@@ -1393,7 +1456,19 @@ var FileDiffOracle = class {
   tier = "T0";
   name = "file-diff";
   canJudge(_ac, evidence) {
-    return evidence.some((entry) => entry.evidenceType === "file_diff" || entry.evidenceType === "quote_with_location");
+    return evidence.some(
+      (entry) => entry.evidenceType === "file_diff" || entry.evidenceType === "quote_with_location" || entry.evidenceType === "command_output"
+      // v9.4：pwsh Set-Content/Test-Path 等文件操作产出 command_output
+    );
+  }
+  /** 从 AC 描述提取路径 token（v9.4：command_output 证据的路径对齐用）。 */
+  pathHints(desc) {
+    const out = /* @__PURE__ */ new Set();
+    for (const m of desc.matchAll(/[A-Za-z0-9_\-./\\]+\.(?:md|js|ts|json|py|txt|yml|yaml|toml|cfg|sh|ps1|css|html)\b|(?:[a-z0-9_\-]+)\.(?:txt|md|js|json|py)\b/gi)) {
+      const norm = m[0].replace(/\\/g, "/").toLowerCase();
+      if (norm.length >= 3) out.add(norm);
+    }
+    return [...out];
   }
   async judge(ac, evidence) {
     const fileEvidences = evidence.filter(
@@ -1401,9 +1476,26 @@ var FileDiffOracle = class {
     );
     const expected = extractExactText(ac.desc);
     const contains = expected === void 0 ? extractContainsText(ac.desc) : void 0;
-    const firstBadEvidence = fileEvidences.find((entry) => {
+    const fileEvidencesOrCmd = fileEvidences.length > 0 ? fileEvidences : evidence.filter((entry) => {
+      if (entry.evidenceType !== "command_output") return false;
+      const payload = entry.payload ?? {};
+      if (typeof payload.command !== "string" || payload.exitCode !== 0) return false;
+      const hints = this.pathHints(ac.desc);
+      if (hints.length === 0) return true;
+      const cmd = payload.command.toLowerCase();
+      if (!hints.some((h) => cmd.includes(h))) return false;
+      if (expected !== void 0) {
+        return typeof payload.stdout === "string" && payload.stdout.includes(expected);
+      }
+      if (contains !== void 0) {
+        return typeof payload.stdout === "string" && payload.stdout.includes(contains);
+      }
+      return true;
+    });
+    const firstBadEvidence = fileEvidencesOrCmd.find((entry) => {
       const payload = entry.payload ?? {};
       if (typeof payload.path !== "string" || payload.path.trim().length === 0) {
+        if (entry.evidenceType === "command_output") return false;
         return true;
       }
       const hasBytes = typeof payload.bytes === "number" && Number.isFinite(payload.bytes) && payload.bytes > 0;
@@ -1420,9 +1512,9 @@ var FileDiffOracle = class {
       }
       return false;
     });
-    const pass = fileEvidences.length > 0 && firstBadEvidence === void 0;
+    const pass = fileEvidencesOrCmd.length > 0 && firstBadEvidence === void 0;
     return {
-      claimId: fileEvidences[0]?.callId ?? ac.id,
+      claimId: fileEvidencesOrCmd[0]?.callId ?? ac.id,
       acId: ac.id,
       oracleTier: "T0",
       result: pass ? "pass" : "fail",
@@ -2099,6 +2191,34 @@ var VerificationService = class extends Service {
   getActiveEpoch(agent) {
     return currentActiveEpoch(this.cache(agent).epochs);
   }
+  /**
+   * 2026-08-19（enforce preset 审查发现）：agent 是否参与过验证系统（会话里有 verification/change 事件）。
+   * goal transition guard 是进程级全局（GOAL_TRANSITION_GUARDS），enforce 实例的 guard 会拦截
+   * 所有会话的 complete；用此方法把"从未使用验证的会话"（其他 preset）放行，避免 enforce 泄漏到全局。
+   */
+  hasVerificationActivity(agent) {
+    return this.allEvents(agent).some((event) => event.type === "verification/change");
+  }
+  /**
+   * 2026-08-20（enforce preset）：per-agent 生效模式。
+   * 引擎保持全局（advisory），但 agentPreset === 'enforce-standard' 的会话按 enforce 处理——
+   * preset 不再挂载第二个引擎实例（loader 挂载机制 + 全局实例共存问题），
+   * 只靠 agentPreset 激活 enforce 语义（gate 拦截 + guard 强制）。
+   * agentPreset 位于 session.header.agentPreset（会话创建头，resolveSessionPreset 读取），
+   * 非 agent 顶层/meta 字段（2026-08-20 两次修正后确定）。
+   */
+  modeOf(agent) {
+    const session = agent.session;
+    const headerPreset = session?.header?.agentPreset;
+    if (headerPreset === "enforce-standard") {
+      return "enforce";
+    }
+    const meta = agent.meta;
+    if (meta?.agentPreset === "enforce-standard") {
+      return "enforce";
+    }
+    return this.config.mode;
+  }
   requireCurrentAuthorityScope(agent) {
     const epoch = this.getActiveEpoch(agent);
     if (!epoch) {
@@ -2199,7 +2319,7 @@ var VerificationService = class extends Service {
     } catch (error) {
       return { ok: false, reason: errorMessage(error) };
     }
-    if (this.config.mode === "enforce") {
+    if (this.modeOf(agent) === "enforce") {
       const epoch = this.getActiveEpoch(agent);
       if (epoch) {
         const prior = this.latestFrozenContractForGoal(agent, epoch.rootGoalId);
@@ -2255,7 +2375,7 @@ var VerificationService = class extends Service {
     let origin = this.config.intent.contractOrigin;
     if (this.config.intent.contractOrigin === "independent-capture") {
       let captured = null;
-      const captureAttempts = this.config.mode === "enforce" ? 3 : 1;
+      const captureAttempts = this.modeOf(agent) === "enforce" ? 3 : 1;
       for (let attempt = 0; attempt < captureAttempts && captured === null; attempt += 1) {
         captured = await this.tryIndependentCapture(
           agent,
@@ -2280,7 +2400,7 @@ var VerificationService = class extends Service {
             return ac;
           })
         };
-      } else if (this.config.mode === "enforce") {
+      } else if (this.modeOf(agent) === "enforce") {
         return {
           ok: false,
           reason: `independent-capture unavailable after ${captureAttempts} attempt(s) (${this.captureUnavailableReason ?? "grader returned no consensus"}); enforce mode requires an authoritative contract (independent-capture) or a human-confirmed one \u2014 fix intent.provider/model or route to human-confirmed`
@@ -2291,7 +2411,7 @@ var VerificationService = class extends Service {
     } else if (this.config.intent.contractOrigin === "human-confirmed") {
       if (this.config.askUser) {
         origin = "human-confirmed";
-      } else if (this.config.mode === "enforce") {
+      } else if (this.modeOf(agent) === "enforce") {
         return {
           ok: false,
           reason: "contract origin human-confirmed requires an askUser confirmation channel, but none is mounted; enforce mode cannot mint an authoritative contract \u2014 mount a confirmation channel or switch to independent-capture"
@@ -2445,7 +2565,7 @@ var VerificationService = class extends Service {
       entry: {
         at: this.clock(),
         status: "failed",
-        mode: this.config.mode,
+        mode: this.modeOf(agent),
         reasons: [`evaluation_error: ${errorMessage(error)}`],
         authorityScope: this.requireCurrentAuthorityScope(agent)
       }
@@ -2590,22 +2710,38 @@ var VerificationService = class extends Service {
         if (!v0 || v0.result !== "fail" || !isFileFamilyAc(ac) && !isRunFamilyAc(ac)) {
           continue;
         }
-        const fb = await bindSelectorForAc(
-          ac,
-          {
-            contractIdentity: identity,
-            refs: scopedProjection.evidenceRefs,
-            captureFailures: scopedProjection.captureFailures,
-            loadBlob: async (key) => this.store.read(key)
-          },
-          (ac2) => hintToEvidenceType(ac2.oracleHint),
-          { familyFallback: true, familyExtraHints: contractRunHints }
-        );
+        const ctx2 = {
+          contractIdentity: identity,
+          refs: scopedProjection.evidenceRefs,
+          captureFailures: scopedProjection.captureFailures,
+          loadBlob: async (key) => this.store.read(key)
+        };
+        const fb = await bindSelectorForAc(ac, ctx2, (ac2) => hintToEvidenceType(ac2.oracleHint), {
+          familyFallback: true,
+          familyExtraHints: contractRunHints
+        });
         if (fb.kind === "bound" && fb.familyFallback) {
           const v1 = await this.judgeAc(agent, contract, ac, fb.evidence, fb);
           if (v1.result === "pass") {
             v1.detail = `${v1.detail ?? ""}\uFF08family evidence fallback: exact selector ${ac.selector?.toolIdentity ?? ""} \u65E0\u6709\u6548\u8BC1\u636E\uFF0C\u6539\u7528\u65CF\u5185\u771F\u5B9E\u6587\u4EF6\u8BC1\u636E ${fb.evidence.toolIdentity}\u2192${fb.evidence.evidenceType} seq${fb.resultSeq}\uFF09`.trim();
             verdicts.set(ac.id, v1);
+            continue;
+          }
+        }
+        if (ac.selector) {
+          const candidates = await familyCandidates(ac, ctx2, ac.selector);
+          for (const cand of candidates) {
+            const v2 = await this.judgeAc(agent, contract, ac, cand.evidence, {
+              kind: "bound",
+              evidence: cand.evidence,
+              resultSeq: cand.resultSeq,
+              familyFallback: true
+            });
+            if (v2.result === "pass") {
+              v2.detail = `${v2.detail ?? ""}\uFF08family evidence fallback: exact selector ${ac.selector?.toolIdentity ?? ""} \u65E0\u6709\u6548\u8BC1\u636E\uFF0C\u65CF\u5185\u5019\u9009\u8BC1\u636E ${cand.evidence.toolIdentity}\u2192${cand.evidence.evidenceType} seq${cand.resultSeq} \u6EE1\u8DB3\u9A8C\u6536\uFF09`.trim();
+              verdicts.set(ac.id, v2);
+              break;
+            }
           }
         }
       }
@@ -2629,7 +2765,7 @@ var VerificationService = class extends Service {
     this.commit(agent, { kind: "verdicts", verdicts: Object.fromEntries(verdicts), authorityScope: this.requireCurrentAuthorityScope(agent) });
     this.commit(agent, {
       kind: "gate",
-      entry: { at: this.clock(), status: gate.status, mode: this.config.mode, reasons: gate.reasons, authorityScope: this.requireCurrentAuthorityScope(agent) }
+      entry: { at: this.clock(), status: gate.status, mode: this.modeOf(agent), reasons: gate.reasons, authorityScope: this.requireCurrentAuthorityScope(agent) }
     });
     return { gate, snapshotHash: this.currentSnapshotHash(agent), bindings };
   }
@@ -3056,6 +3192,22 @@ function apply(ctx, config) {
     const disposeGuard = installGoalTransitionGuard(ctx, service);
     if (!disposeGuard) {
       throw new Error("enforce verification blocked: GoalTransitionGuard seam unavailable");
+    }
+    const unregister = () => {
+      try {
+        disposeGuard();
+      } catch {
+      }
+    };
+    const anyCtx = ctx;
+    if (typeof anyCtx.effect === "function") {
+      anyCtx.effect(() => unregister);
+    } else if (typeof anyCtx.dispose === "function") {
+      const originalDispose = anyCtx.dispose;
+      anyCtx.dispose = function() {
+        unregister();
+        return originalDispose.apply(this, arguments);
+      };
     }
   }
   ctx.inject(["sessionProjections"], (projectionCtx) => {
