@@ -28,6 +28,29 @@ blocking.
 (`pnpm --filter @bpc-oss/dsh-verification bench`); real-task replay audit and
 completion-capability evaluation in `docs/value-report.md` and `scripts/`.
 
+## ASI-Bench Evaluation (seed31415, B3)
+
+We evaluated verification-guided presets against official baselines on
+[ASI-Bench](https://huggingface.co/datasets/Apexintelligence-AI/ASI-Bench-seed31415)
+(60 scientific tasks, Level B3, deepseek-v4-flash):
+
+| Condition | Completed | Format score | Avg time | Tokens/task |
+|---|---|---|---|---|
+| **enforce-rsi-standard** | **60/60** | **0.979** | **18.4 min** | **5.28M** |
+| **enforce-standard** | **60/60** | 0.975 | 23.5 min | 7.20M |
+| enforce-standard-masked | 48/59 | 0.790 | 17.9 min | 6.36M |
+| standard (official) | 50/60 | 0.799 | 38.5 min | 11.20M |
+| minimal | 7/59 | 0.080 | 12.9 min | 7.78M |
+
+Key findings: verification guidance raises completion from **83% → 100%**;
+RSI makes agents **2× faster and cheaper**; reference leakage (masked delta)
+is quantified at ~19%; minimal preset is unusable on B3.
+
+Full report: [`docs/asi-bench-final-report.md`](docs/asi-bench-final-report.md) ·
+Plan: [`docs/asi-bench-eval-plan-v1.2.md`](docs/asi-bench-eval-plan-v1.2.md) ·
+Data: [Release `asi-bench-v1`](https://github.com/bpc-oss/dsh-verification/releases/tag/asi-bench-v1)
+(de-identified 2747 files + SHA256 manifests)
+
 ---
 
 # 中文文档（详细）
@@ -68,6 +91,28 @@ Bobby 验证引擎移植到 DeepSeek Harness（DSH）的 Cordis 插件套件（*
 | 召回率（植入缺陷的任务被拦截） | **100%**（8/8） |
 | 误报率（干净任务被误拦） | **0%**（4/4） |
 | 单测 | **140** 全绿 |
+
+## ASI-Bench 开源测评（seed31415, B3）
+
+在 [ASI-Bench](https://huggingface.co/datasets/Apexintelligence-AI/ASI-Bench-seed31415)
+（60 个科学任务，Level B3，deepseek-v4-flash）上对比验证引导 preset 与官方基线：
+
+| 条件 | 完成数 | 格式分 | 平均耗时 | 每任务 tokens |
+|---|---|---|---|---|
+| **enforce-rsi-standard** | **60/60** | **0.979** | **18.4 分钟** | **5.28M** |
+| **enforce-standard** | **60/60** | 0.975 | 23.5 分钟 | 7.20M |
+| enforce-standard-masked | 48/59 | 0.790 | 17.9 分钟 | 6.36M |
+| standard（官方） | 50/60 | 0.799 | 38.5 分钟 | 11.20M |
+| minimal | 7/59 | 0.080 | 12.9 分钟 | 7.78M |
+
+**核心发现**：验证引导把完成率从 **83% 提升到 100%**；RSI 让 agent **快 2 倍、省 2 倍**
+（5.28M vs 11.20M tokens）；reference 泄漏（masked 差值）量化约 19%；minimal
+极简 preset 在 B3 上几乎不可用。
+
+完整报告：[`docs/asi-bench-final-report.md`](docs/asi-bench-final-report.md) ·
+方案：[`docs/asi-bench-eval-plan-v1.2.md`](docs/asi-bench-eval-plan-v1.2.md) ·
+数据：[Release `asi-bench-v1`](https://github.com/bpc-oss/dsh-verification/releases/tag/asi-bench-v1)
+（脱敏后 2747 文件 + SHA256 manifest）
 | 真实案例 | 完成闸门拦截 2/3 AC 证据不足的虚假完成（详见 `docs/value-report.md`） |
 
 默认 `mode: advisory` 只记录、永不 deny，装上不改变任何日常行为；验收/评测场景显式开 `enforce` 才启动拦截。
