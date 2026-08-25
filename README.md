@@ -50,7 +50,8 @@ Reference leakage (masked delta) is quantified at ~19%; minimal preset is
 unusable on B3.
 
 Full report: [`docs/asi-bench-final-report.md`](docs/asi-bench-final-report.md) ·
-Plan: [`docs/asi-bench-eval-plan-v1.2.md`](docs/asi-bench-eval-plan-v1.2.md) ·
+Detailed guide: [`docs/enforce-rsi-guide.md`](docs/enforce-rsi-guide.md) (design,
+mechanisms, synergy) · Plan: [`docs/asi-bench-eval-plan-v1.2.md`](docs/asi-bench-eval-plan-v1.2.md) ·
 Data: [Release `asi-bench-v1`](https://github.com/bpc-oss/dsh-verification/releases/tag/asi-bench-v1)
 (de-identified 2747 files + SHA256 manifests)
 
@@ -115,6 +116,7 @@ RSI 让同一验证工作流 **快 2 倍、省 2 倍**（18.4 分钟 vs 38.5 分
 minimal 极简 preset 在 B3 上几乎不可用。
 
 完整报告：[`docs/asi-bench-final-report.md`](docs/asi-bench-final-report.md) ·
+详细介绍：[`docs/enforce-rsi-guide.md`](docs/enforce-rsi-guide.md)（设计动机/机制/协同原理）·
 方案：[`docs/asi-bench-eval-plan-v1.2.md`](docs/asi-bench-eval-plan-v1.2.md) ·
 数据：[Release `asi-bench-v1`](https://github.com/bpc-oss/dsh-verification/releases/tag/asi-bench-v1)
 （脱敏后 2747 文件 + SHA256 manifest）
