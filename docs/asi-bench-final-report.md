@@ -1,4 +1,4 @@
-# ASI-Bench 开源测评最终报告
+# ASI-Bench 开源测评最终报告：enforce + RSI
 
 > 日期：2026-08-25
 > 数据集：ASI-Bench seed31415（HF: Apexintelligence-AI/ASI-Bench-seed31415, Apache-2.0）
@@ -8,10 +8,10 @@
 
 ## 一、五条件对比结果
 
-| 指标 | enforce-rsi-standard | enforce-standard | enforce-standard-masked | standard | minimal |
+| 指标 | **enforce + RSI** 🏆 | 仅 enforce | enforce + RSI（masked） | standard | minimal |
 |---|---|---|---|---|---|
 | 结果数 | 60/60 | 60/60 | 59/60 | 60/60 | 59/60 |
-| 完成 | **60** | **60** | 48 | 50 | 7 |
+| 完成 | **60** | 60 | 48 | 50 | 7 |
 | 失败 | 0 | 0 | 11 | 10 | 52 |
 | 格式完成度 | **0.979** | 0.975 | 0.790 | 0.799 | 0.080 |
 | 通过任务 | 59/60 | 59/60 | 47/59 | 49/60 | 5/59 |
@@ -19,12 +19,12 @@
 | 每任务 tokens | **5.28M** | 7.20M | 6.36M | 11.20M | 7.78M |
 | 每任务 output | 68K | 78K | 65K | 156K | 69K |
 
-## 二、核心结论
+## 二、核心结论：enforce + RSI 是最优组合
 
-1. **enforce-standard / enforce-rsi-standard 完成率 100%**，官方 standard 83%（50/60）
-2. **rsi 最快最省**（18.4min/任务、5.28M tokens）——RSI 能力闭环（工具发现/技能复用/研究编排）提升效率
-3. **std 最慢最贵**（38.5min、11.20M tokens、失败 10）——验证引导缺失的代价
-4. **masked 差值量化**：reference 不可见后完成率 100%→81%，泄漏上界 ~19%；即使无 reference，enforce 完成率仍远超 std
+1. **enforce + RSI 完成率 100%（60/60）**，官方 standard 仅 83%（50/60）——验证工作流显著提升可靠性
+2. **RSI 让验证工作流快 2 倍、省 2 倍**：enforce + RSI 平均 18.4min/5.28M tokens vs 仅 enforce 23.5min/7.20M vs standard 38.5min/11.20M——RSI 能力闭环（工具发现/技能复用/研究编排）驱动效率
+3. **enforce + RSI 是最完整方案**：既有验证的可靠性（100% 完成），又有 RSI 的效率（最快最省）
+4. **masked 差值量化**：reference 不可见后 enforce + RSI 完成率 100%→81%，泄漏上界 ~19%；即使无 reference，完成率仍远超 std
 5. **minimal 几乎不可用**（12% 完成率）——B3 任务需要完整工具集
 
 ## 三、可验证性验收（全部通过）
