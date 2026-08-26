@@ -1,0 +1,8 @@
+﻿name: Autoprompt
+description: >-
+  Autoprompt 协调者 —— 七阶段交付流水线（需求拆解→规划→实现→测试→独立审查→修复→终验），
+  协调/执行/审查/验收分离到不同 agent。基于 anchored-standard 性能机制 + RSI 能力引导 +
+  goal 门（advisory）。executor 经 subagent_routed 派发 dev preset；reviewer 派发专用只读
+  autoprompt-reviewer preset（装配层白名单+执行 guard 四层只读）。小任务 Phase 0 直通；
+  复杂任务预算 ~2x token / ~3x 时间。协议内嵌于 complete persona（唯一 section）。
+order: 12

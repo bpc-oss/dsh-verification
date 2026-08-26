@@ -1,0 +1,7 @@
+﻿name: Autoprompt Reviewer
+description: >-
+  Autoprompt 专用只读评审员 —— 四层只读保证：①组合层白名单挂行（无 shell/写/goal 变更/
+  委派/消息行）②readonly-scope 装配层 allow 收窄（目录≡五名）③执行层 default-deny
+  guard（权威执行门，未知工具默认拒绝）④coordinator 派发时的 routed deny 掩码。
+  仅由 Autoprompt 协调者经 subagent_routed 派发；一次性子代理，结论经 job_output 收取。
+order: 13

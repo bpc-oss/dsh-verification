@@ -1,0 +1,87 @@
+# The `autoprompt-reviewer` preset: dedicated read-only review role dispatched
+# by the Autoprompt coordinator (plan v8 §4-D8). WHITELIST-CLONE semantics:
+# ONLY the rows below are mounted. Everything else a normal preset carries is
+# deliberately absent — no shells (pwsh/bash/terminal/pty/persistent/custom),
+# no write-capable composition beyond tool-fs (whose write/edit pair is
+# neutralized by readonly-scope layers ②③), no goal mutations, no delegation,
+# no agent messaging, no todo/web/ask-user/jobs, no planning group, no
+# anchored bootstrap machinery.
+#
+# Four-layer read-only guarantee:
+#   ① whitelist composition (this file mounts nothing dangerous)
+#   ② readonly-scope assembly allowlist (catalog ≡ ALLOW_REVIEWER exactly)
+#   ③ readonly-scope execution default-deny guard (THE authoritative boundary)
+#   ④ routed tool_filter deny mask passed by the coordinator at dispatch
+# ALLOW_REVIEWER = [read, read_image, glob, grep, skill]
+# REVIEWER-PERSIST v1 (2026-08-27): effective allowlist is now
+# [read, read_image, glob, grep, skill, write, edit] (see readonly-scope row);
+# write/edit are gated to eval/reviews/ by the coordinator-side reviewer brief
+# so the read-only guarantee to target files is preserved.
+# (no `report`: one-shot children never receive it; the final assistant message
+#  is the deliverable and reaches the coordinator via job_output.)
+#
+# This file is an AGENT-PLANE composition mounted once under a standing scope;
+# rows registering into host registries contribute nothing and need no realm
+# (same reasoning as dev/dev-reviewer); the compaction group carries its own
+# entry-local realm.
+
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: You are an independent review engineer dispatched inside the Autoprompt pipeline. 只读评审：只阅读目标、diff 与测试证据，输出结构化缺陷清单（逐条分阻塞/建议并附证据），绝不修改文件、绝不执行命令、绝不派发子代理。你的最终 assistant 消息就是交付物（协调者经后台任务结果收取），请以缺陷清单全文作结。
+
+- id: agent-instructions
+  name: '@deepseek-ai/dsh-agent-instructions'
+  config:
+    maxBytes: 65536
+
+- id: skill-filesystem
+  name: '@deepseek-ai/dsh-skill-filesystem'
+  config:
+    customSkillDirs:
+      - C:/Users/Administrator/.dsh/.agent-presets/autoprompt-reviewer/skills
+
+- id: tool-fs
+  name: '@deepseek-ai/dsh-tool-fs'
+
+- id: tool-fs-search
+  name: '@deepseek-ai/dsh-tool-fs-search'
+  config:
+    sampleOverCapGlobResults: false
+
+- id: tool-skill
+  name: '@deepseek-ai/dsh-tool-skill'
+
+- id: readonly-scope
+  name: ./readonly-guard-final.mjs
+  config:
+    # REVIEWER-PERSIST v1 (2026-08-27): + write/edit so the review deliverable
+    # (defect list JSON) can be persisted to the scoped review dir and survive
+    # session compaction. read-only guarantee to target files is preserved via
+    # the persona contract + tool_filter deny; write/edit are gated to the
+    # `eval/reviews/` path by the reviewer brief (coordinator-side contract).
+    allow: [read, read_image, glob, grep, skill, write, edit]
+- id: compaction
+  name: cordis:group
+  group: true
+  isolate:
+    compaction: true
+    toolResultPruner: true
+  config:
+    - id: compaction-basic
+      name: '@deepseek-ai/dsh-compaction-basic'
+
+    - id: command-compact
+      name: '@deepseek-ai/dsh-command-compact'
+
+    - id: tool-result-pruner
+      name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+      config:
+        # REVIEWER-LENGTH v1 (2026-08-27): raise the pruner threshold so the
+        # review agent reads COMPLETE file contents (source, evidence) instead
+        # of a head/tail fragment — truncated inputs produced truncated
+        # defect lists. 8192 → 65536 for the reviewer preset.
+        thresholdChars: 65536
+        headChars: 4096
+        tailChars: 1024
+

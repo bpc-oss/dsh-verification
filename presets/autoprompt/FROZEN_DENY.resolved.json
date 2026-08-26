@@ -1,0 +1,25 @@
+{
+  "$schema": "autoprompt/frozen-deny-resolved-v1",
+  "generated_for": "autoprompt-reviewer (whitelist clone)",
+  "note": "Exact-name artifact from reviewer registry semantics. Static parse based on round-8 review evidence (A8-F1); deployment-side programmatic verification against actual view().restrictableNames remains T1b.",
+  "names": [
+    "shell",
+    "terminal",
+    "subagent_routed",
+    "knowledge_ingest",
+    "dev_tool_search",
+    "reset_verification_plan",
+    "set_verification_plan"
+  ],
+  "excluded_names_with_reason": {
+    "pwsh": "reviewer whitelist clone does not mount tool-pwsh row; not present in reviewer registry layer",
+    "create_goal": "row removed by whitelist clone; not in registry",
+    "update_goal": "row removed by whitelist clone; not in registry",
+    "todo_write": "row removed by whitelist clone; not in registry",
+    "send_message": "row removed by whitelist clone; not in registry",
+    "interrupt_agent": "row removed by whitelist clone; not in registry",
+    "list_agents": "row removed by whitelist clone; not in registry",
+    "job_kill": "row removed by whitelist clone; not in registry"
+  },
+  "allow_reviewer": ["read", "read_image", "glob", "grep", "skill", "write", "edit"]
+}
