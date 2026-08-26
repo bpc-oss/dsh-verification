@@ -339,3 +339,33 @@ export function foldVerificationRecords(
 export function gateResultOf(entry: GateSummary): z.infer<typeof GateResultSchema> {
   return { status: entry.status, reasons: entry.reasons };
 }
+
+/**
+ * rc.2 projection registration splits the legacy single `schema` into
+ * `stateSchema` (internal fold state) and `wire.viewSchema` (external view).
+ * This is the internal RegistryState schema used by the dsh-verification
+ * session projection (projection + incremental epoch fold state).
+ */
+export const RegistryStateSchema = z
+  .object({
+    projection: VerificationProjectionSchema,
+    epoch: z
+      .object({
+        epochs: z.array(
+          z
+            .object({
+              epochId: z.string().min(1),
+              rootSeq: z.number().int().min(0),
+              rootGoalId: z.string().min(1),
+              createdSeq: z.number().int().min(0),
+              status: z.enum(['active', 'closed']),
+              closedSeq: z.number().int().min(0).optional(),
+              contentHash: z.string().optional()
+            })
+            .strict()
+        ),
+        lastUserSeqOutsideActive: z.number().int()
+      })
+      .strict()
+  })
+  .strict();

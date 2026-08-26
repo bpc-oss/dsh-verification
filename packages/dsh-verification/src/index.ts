@@ -20,7 +20,7 @@ import { installProReviewTool } from './pro-review-tool';
 import { buildVerificationGuidance } from './prompts';
 import { VerificationService } from './service';
 import { createFileBlobStore, createMemoryBlobStore } from './evidence-store';
-import { emptyVerificationProjection, VerificationProjectionSchema, foldVerificationRecords, taskEpochViews, type VerificationProjection } from './projection';
+import { emptyVerificationProjection, VerificationProjectionSchema, RegistryStateSchema, foldVerificationRecords, taskEpochViews, type VerificationProjection } from './projection';
 import { applyEpochEvent, emptyIncrementalEpochState, type IncrementalEpochState } from './task-epoch';
 
 export * from './projection';
@@ -310,7 +310,7 @@ export function apply(ctx: Context, config: Partial<VerificationConfig>): void {
   ctx.inject(['sessionProjections'], (projectionCtx) => {
     projectionCtx.sessionProjections.register<'verification', RegistryState>({
       key: 'verification',
-      schema: VerificationProjectionSchema.nullable(),
+      stateSchema: RegistryStateSchema,
       init: (): RegistryState => ({ projection: emptyVerificationProjection(), epoch: emptyIncrementalEpochState() }),
       apply: (state: RegistryState, event: { type: string; data: unknown; seq: number; time: number; sessionId?: string }) => {
         if (event.type === 'verification/change') {
@@ -328,10 +328,13 @@ export function apply(ctx: Context, config: Partial<VerificationConfig>): void {
         }
         return { ...state, epoch };
       },
-      view: (state): VerificationProjection => ({
-        ...state.projection,
-        taskEpochs: taskEpochViews(state.epoch.epochs)
-      }),
+      wire: {
+        viewSchema: VerificationProjectionSchema.nullable(),
+        view: (state): VerificationProjection => ({
+          ...state.projection,
+          taskEpochs: taskEpochViews(state.epoch.epochs)
+        })
+      },
       stateVersion: 1
     });
   });
